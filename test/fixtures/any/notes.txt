@@ -1,0 +1,10 @@
+# Trip notes
+
+Packing list for the weekend, in no particular order.
+
+- [ ] passport and tickets
+- [x] charger for the laptop
+
+## Plan
+
+See the [map](https://example.invalid/map) before leaving.

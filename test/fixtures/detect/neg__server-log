@@ -1,0 +1,5 @@
+2024-01-01 10:00:00,123 INFO starting server on :8080
+2024-01-01 10:00:01,456 INFO ## loaded 12 routes
+2024-01-01 10:00:02,789 WARN slow request /api/x 1200ms
+2024-01-01 10:00:03,012 ERROR failed to fetch [config](https://example.com/c)
+2024-01-01 10:00:04,345 INFO request done

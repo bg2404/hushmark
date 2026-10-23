@@ -1081,6 +1081,107 @@ html[data-mdv] svg.mdv-coffee {
   height: 22px;
 }
 
+/* on a website: switches that only Hushmark's settings page can change */
+html[data-mdv] .mdv-toggle-row.mdv-locked {
+  cursor: default;
+}
+
+html[data-mdv] .mdv-toggle-row.mdv-locked input.mdv-switch {
+  cursor: default;
+  opacity: 0.55;
+}
+
+html[data-mdv] .mdv-set-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--mdv-surface-raised);
+  border: 1px solid var(--mdv-border);
+  border-radius: 12px;
+}
+
+html[data-mdv] .mdv-set-locked + .mdv-set-section {
+  margin-top: 1.5rem;
+}
+
+html[data-mdv] .mdv-set-locked-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--mdv-muted);
+}
+
+/* ---- the settings page (options.html) ---------------------------------- */
+
+html[data-mdv="options"],
+html[data-mdv="options"] body.mdv-options {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  background: var(--mdv-bg);
+}
+
+html[data-mdv="options"] .mdv-root {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+/* only html scrolls (a scrolling body would hold the sticky header and
+   footer), and a focused control is kept clear of both */
+html[data-mdv="options"] body.mdv-options {
+  overflow: visible;
+}
+
+html[data-mdv="options"] {
+  scroll-padding-block: 4.5rem;
+}
+
+html[data-mdv] dialog.mdv-settings.mdv-settings-page {
+  position: relative;
+  inset: auto;
+  width: min(40rem, 100%);
+  height: auto;
+  min-height: 100vh;
+  margin: 0 auto;
+  border-right: 1px solid var(--mdv-border);
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+}
+
+html[data-mdv] .mdv-settings-page .mdv-set-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  min-height: 3rem;
+  background: var(--mdv-surface);
+}
+
+html[data-mdv] .mdv-settings-page .mdv-set-head h1 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+html[data-mdv] .mdv-settings-page .mdv-set-body {
+  flex: 1 0 auto;
+  overflow: visible;
+}
+
+html[data-mdv] .mdv-settings-page .mdv-set-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+}
+
+@media (max-width: 40rem) {
+  html[data-mdv] dialog.mdv-settings.mdv-settings-page { border-right: 0; border-left: 0; }
+}
+
 /* a narrow or short window, or large text: keep the footer to one line */
 @media (max-width: 420px), (max-height: 40em) {
   html[data-mdv] .mdv-support-text span { display: none; }

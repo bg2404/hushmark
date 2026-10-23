@@ -28,26 +28,15 @@ Hushmark is free, with a support link to https://buymeacoffee.com/furiouslad23. 
 
 `npm run package` reminds you while the address is empty, and refuses one that is not `https://`.
 
-## 3. Publish the privacy policy (you decide where)
+## 3. The privacy policy's public address
 
-The dashboard needs a privacy policy URL that opens without signing in, and the GitHub repository is private. Pick one:
+The repository bg2404/hushmark is public, so the policy is published where GitHub renders it:
 
-- **A public gist** of `privacy-policy.md`: GitHub renders it as a page.
+https://github.com/bg2404/hushmark/blob/main/store/privacy-policy.md
 
-  ```bash
-  GH_TOKEN="$(gh auth token -u bg2404)" gh gist create --public --desc "Hushmark privacy policy" store/privacy-policy.md
-  ```
+Use that address in the dashboard. It opens without signing in, and it always shows the policy on `main`, so after any change to `privacy-policy.md` run `npm run store:policy` (which rebuilds the HTML copy) and push. Keep the file at that path: moving or renaming it breaks the link the store shows.
 
-- **GitHub Pages** from a small public repository holding `privacy-policy.html` (the file is self-contained: no scripts, no external resources).
-- **Make the main repository public** and link to `store/privacy-policy.md` on GitHub.
-
-After any change to `privacy-policy.md`, run `npm run store:policy` to rebuild the HTML, then update the published copy **at the same address**. For the gist:
-
-```bash
-GH_TOKEN="$(gh auth token -u bg2404)" gh gist edit <gist-url> --filename privacy-policy.md store/privacy-policy.md
-```
-
-where `<gist-url>` is the address `gh gist create` printed. For GitHub Pages or the public repository, replace the file there and push. Do not create a new gist: the dashboard and the policy both point at the old address.
+GitHub Pages is on for the repository, but it cannot serve the policy: bg2404.github.io redirects to www.bhaskergoel.com, which Vercel serves, and Vercel answers unknown paths with the website's home page. To give the policy a page on that domain instead, add `privacy-policy.html` (self-contained: no scripts, no external resources) to the website's own project.
 
 ## 4. Build and check the package
 
@@ -55,7 +44,7 @@ where `<gist-url>` is the address `gh gist create` printed. For GitHub Pages or 
 npm run package
 ```
 
-This checks the manifest against the store's rules (name up to 75 characters, description up to 132, valid version, every referenced file present, exactly the permissions the privacy answers justify (activeTab, scripting, storage, http/https hosts) and a background worker) and writes `dist/hushmark-<version>.zip` with `manifest.json` at the root. The build is reproducible: the same sources always give the same SHA-256, which the command prints.
+This checks the manifest against the store's rules (name up to 75 characters, description up to 132, valid version, every referenced file present, exactly the permissions the privacy answers justify (activeTab, scripting, storage, and file, http and https hosts), a background worker, and the gate scripts it registers) and writes `dist/hushmark-<version>.zip` with `manifest.json` at the root. The build is reproducible: the same sources always give the same SHA-256, which the command prints.
 
 To run the whole test suite against the zip exactly as it will be uploaded:
 
@@ -67,7 +56,7 @@ V=$(node -p "require('./extension/manifest.json').version") && rm -rf /tmp/hushm
 
 1. In the dashboard choose **Add new item** and upload the zip.
 2. **Store listing** tab: copy the fields from `listing.md` and upload the images from `assets/`.
-3. **Privacy practices** tab: copy the answers from `privacy-practices.md`, and paste the privacy policy URL from step 3.
+3. **Privacy practices** tab: copy the answers from `privacy-practices.md`, and paste the privacy policy URL from step 3 (https://github.com/bg2404/hushmark/blob/main/store/privacy-policy.md).
 4. **Test instructions** tab (optional, but it helps the reviewer, who would otherwise see nothing happen): paste the text below.
 5. **Distribution** tab: choose visibility (**Public**, or **Unlisted** to share by link first) and regions (all regions is the default).
 6. Click **Submit for review**. The confirmation dialog has a checkbox to publish automatically when the review passes. Leave it checked to go live on approval. Uncheck it for deferred publishing, then publish from the dashboard within 30 days of approval, or the submission reverts to a draft. If you left it checked and change your mind, choose **Defer publish** from the item's menu.
@@ -78,6 +67,12 @@ Hushmark formats Markdown files: local files, and raw .md files on websites. No 
 2. Toolbar button: on a plain-text tab whose address does not end in .md, click the Hushmark icon in the toolbar (pin it from the puzzle icon first); the tab is formatted. On a normal web page the icon shows a "!" badge and does nothing.
 3. The sliders icon at the top right opens Settings. Turning off "Format Markdown files on websites" stops Hushmark from running on websites (reload the tab to see the plain text again); the toolbar button still works.
 4. Local files: open chrome://extensions, click Details under Hushmark and turn on "Allow access to file URLs" (Chrome does not run extensions on local files until this is on). Save some Markdown in a file ending in .md and open it in Chrome with Ctrl+O (Cmd+O on Mac). Ctrl+S saves: the first time, Chrome's file dialog opens; choose the same file, then allow Chrome's prompt to save changes.
+5. Other local files (off by default): open Hushmark's settings page (right-click the toolbar icon, then Options; on a website, Settings shows these switches read-only and links there) and turn on "Format Markdown in other local files". Save these four lines as trip.txt and open it:
+   # Trip notes
+   - [ ] passport and tickets
+   - [x] charger for the laptop
+   See the [map](https://example.com/map) before leaving.
+   (a blank line between the heading, the list and the last line is fine). It is formatted, with a "Show as plain text" button. Short or loosely structured text may stay plain on purpose; the toolbar button formats it on request. A .py, .log or .json file is never formatted.
 ```
 
 ## 6. Review

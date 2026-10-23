@@ -1,0 +1,10 @@
+# tool
+
+A small command line tool.
+
+```sh
+npm install -g tool
+tool --help
+```
+
+That is all there is to it.

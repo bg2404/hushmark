@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- This file was automatically generated from C sources - DO NOT EDIT! -->
+<repository version="1.2" xmlns="http://www.gtk.org/introspection/core/1.0">
+  <namespace name="Demo" version="1.0">
+    <class name="Widget" parent="GObject.Object">
+      <doc xml:space="preserve">A widget that shows things on the screen for the user.
+
+Create one with the constructor and then pack it in a container:
+
+```c
+DemoWidget *w = demo_widget_new ();
+gtk_box_append (box, w);
+```
+
+The widget can also be described in a template file, like this:
+
+```xml
+&lt;object class="DemoWidget"/&gt;
+```</doc>
+      <method name="show" c:identifier="demo_widget_show">
+        <doc xml:space="preserve">Shows the widget on the screen until it is hidden again.</doc>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+      </method>
+    </class>
+  </namespace>
+</repository>

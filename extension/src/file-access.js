@@ -46,6 +46,14 @@
   var MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdown', '.mkd', '.mkdn', '.mdwn', '.mdtxt', '.mdtext'];
   var PICKER_TYPES = [{ description: 'Markdown', accept: { 'text/markdown': MARKDOWN_EXTENSIONS } }];
 
+  // The dialog's file filter: Markdown for Markdown names; none for a file
+  // formatted because of its content (notes.txt, README), which the
+  // Markdown filter would hide.
+  function pickerTypes(fileName) {
+    var lower = String(fileName || '').toLowerCase();
+    return MARKDOWN_EXTENSIONS.some(function (ext) { return lower.slice(-ext.length) === ext; }) ? PICKER_TYPES : undefined;
+  }
+
   function failure(name, message) {
     return Object.assign(new Error(message), { name: name });
   }
@@ -261,7 +269,9 @@
     if (options.beforePicker) {
       options.beforePicker();
     }
-    return global.showOpenFilePicker({ types: PICKER_TYPES, multiple: false })
+    var pick = { multiple: false };
+    if (pickerTypes(fileName)) pick.types = pickerTypes(fileName);
+    return global.showOpenFilePicker(pick)
       .then(function (picked) {
         var h = picked[0];
         if (!h || h.name !== fileName) {
@@ -332,7 +342,9 @@
         if (options.beforePicker) {
           options.beforePicker();
         }
-        return global.showSaveFilePicker({ suggestedName: fileName, types: PICKER_TYPES }).then(function (h2) {
+        var save = { suggestedName: fileName };
+        if (pickerTypes(fileName)) save.types = pickerTypes(fileName);
+        return global.showSaveFilePicker(save).then(function (h2) {
           return write(h2, text, null).then(function () {
             throw Object.assign(failure('SavedAsCopy', 'Saved through the save dialog'), { savedName: h2.name });
           });

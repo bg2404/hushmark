@@ -1,0 +1,5 @@
+[2024-01-01T10:00:00Z] user: summarise the repo
+[2024-01-01T10:00:05Z] assistant: ## Summary
+[2024-01-01T10:00:05Z] assistant: - parser in `src/`
+[2024-01-01T10:00:06Z] assistant: - see [README](https://example.com/readme)
+[2024-01-01T10:00:07Z] tool: exit 0

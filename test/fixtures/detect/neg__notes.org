@@ -1,0 +1,12 @@
+#+TITLE: Notes
+#+AUTHOR: Someone
+
+* Heading one
+  Some text with a [[https://example.com][link]].
+** Subheading
+   - item one
+   - item two
+
+| a | b |
+|---+---|
+| 1 | 2 |

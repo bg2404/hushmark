@@ -1,0 +1,13 @@
+name: Bug report
+description: File a bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thanks for reporting!
+        Please read [the guide](https://example.com/guide) first.
+        - [ ] I searched existing issues
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?

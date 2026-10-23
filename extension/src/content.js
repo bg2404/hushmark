@@ -68,6 +68,10 @@
     // not end in a Markdown extension.
     var forced = window.__hushmarkForce === true;
     window.__hushmarkForce = false;
+    // Set by the background worker when the file gate found a local file
+    // whose content looks like Markdown (file-gate.js).
+    var detected = !forced && window.__hushmarkDetected === true && location.protocol === 'file:';
+    window.__hushmarkDetected = false;
     if (!api || typeof api.mount !== 'function' || !api.prefs) {
       return;
     }
@@ -75,7 +79,7 @@
     if (html.hasAttribute('data-mdv') || html.hasAttribute('data-mdv-claim')) {
       return; // already rendered, or being rendered
     }
-    if (!forced && !MARKDOWN_PATH.test(location.pathname)) {
+    if (!forced && !detected && !MARKDOWN_PATH.test(location.pathname)) {
       return;
     }
     if (!isChromePlainTextView()) {
@@ -93,14 +97,18 @@
         html.removeAttribute('data-mdv-claim');
         return;
       }
+      if (detected && !prefs.anyFile) {
+        html.removeAttribute('data-mdv-claim'); // turned off while loading
+        return;
+      }
       if (api.fileAccess && api.fileAccess.settingsLoaded) {
         api.fileAccess.settingsLoaded();
       }
-      start();
+      start(detected);
     });
   }
 
-  function start() {
+  function start(detected) {
 
     var pre = document.body.firstElementChild;
     var source = pre.textContent;
@@ -110,7 +118,7 @@
     }
 
     try {
-      api.mount({ pre: pre, text: source, fileName: fileName() });
+      api.mount({ pre: pre, text: source, fileName: fileName(), detected: detected });
     } catch (err) {
       console.error('[Hushmark] Could not render this file; leaving the plain text in place.', err);
       document.documentElement.removeAttribute('data-mdv');

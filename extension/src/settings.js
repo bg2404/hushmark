@@ -7,7 +7,8 @@
  *
  *   Appearance  theme picker with live preview, font, text size, line width
  *   Editing     autosave, spell check
- *   Websites    format Markdown files on websites
+ *   Files and websites  other local files that look like Markdown, and
+ *               Markdown files on websites
  *   Privacy     web images, remembered files, forget / reset
  *
  * Every control writes through prefs.set() and follows prefs.onChange(), so
@@ -18,7 +19,12 @@
  * Only the user's own input can change a setting. On a website the site's
  * scripts can reach this page's DOM (a page of the same origin can open the
  * file in a window and script it), so events made by scripts are stopped
- * before any control sees them.
+ * before any control sees them. A site could still restyle the page to steer
+ * a real click, so on websites the switches that affect privacy, editing or
+ * local files are read-only here; they are changed in Hushmark's own
+ * settings page (options.html), which no website can reach.
+ *
+ * The same drawer is that settings page: createSettings({ page: true }).
  */
 (function (global) {
   'use strict';
@@ -39,6 +45,11 @@
   // A site that sandboxes its raw files (raw.githubusercontent.com does)
   // gives the page an opaque origin; Chrome then blocks new tabs from it.
   var SANDBOXED = !IS_LOCAL && global.origin === 'null';
+  // anything but a local file or Hushmark's own page: websites, and also a
+  // blob: page a site made itself and the toolbar button formatted
+  var IS_WEB_PAGE = !IS_LOCAL && global.location.protocol !== 'chrome-extension:';
+  // read-only on websites (see the top of this file)
+  var LOCKED_ON_WEB = { autosave: true, spellcheck: true, anyFile: true, remoteImages: true, rememberFiles: true };
 
   function el(tag, cls, text) {
     var e = doc.createElement(tag);
@@ -109,9 +120,23 @@
     // This guard is a first line only: a script can move a control out of the
     // panel, or stop events before they reach it, so every handler that
     // changes something also checks for itself (trusted() below).
+    // On the settings page, input that arrives just after the page comes to
+    // the front was aimed at whatever was there before: a website can bring
+    // this page up ("Open settings page") between the two clicks of a
+    // double-click. Such input is ignored for half a second.
+    var calmUntil = 0;
+    if (options.page) {
+      var settle = function () { calmUntil = Date.now() + 500; };
+      settle();
+      doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'visible') settle(); });
+      global.addEventListener('focus', settle);
+      var chr = global.chrome;
+      if (chr && chr.tabs && chr.tabs.onActivated) chr.tabs.onActivated.addListener(settle);
+      if (chr && chr.windows && chr.windows.onFocusChanged) chr.windows.onFocusChanged.addListener(settle);
+    }
     ['click', 'change', 'input', 'keydown', 'mousedown', 'pointerdown', 'mousemove', 'mouseenter', 'mouseleave'].forEach(function (type) {
       panel.addEventListener(type, function (e) {
-        if (!e.isTrusted) {
+        if (!e.isTrusted || Date.now() < calmUntil) {
           e.preventDefault();
           e.stopImmediatePropagation();
         }
@@ -121,11 +146,16 @@
     /* -------------------------------------------------------- header */
 
     var head = el('header', 'mdv-set-head');
-    var title = el('h2', null, 'Settings');
+    var title = el(options.page ? 'h1' : 'h2', null, options.page ? 'Hushmark settings' : 'Settings');
     title.id = titleId;
     var closeBtn = iconButton('mdv-icon-btn mdv-set-close', 'close', 'Close settings');
     closeBtn.addEventListener('click', trusted(function () { panel.close(); }));
-    head.append(title, closeBtn);
+    head.append(title);
+    if (!options.page) {
+      head.appendChild(closeBtn);
+    } else {
+      panel.classList.add('mdv-settings-page');
+    }
 
     var body = el('div', 'mdv-set-body');
 
@@ -180,16 +210,20 @@
     // An on/off switch row; the whole row is the click target, but only the
     // label names the switch (the description is its description).
     function toggle(label, desc, key) {
+      var locked = IS_WEB_PAGE && LOCKED_ON_WEB[key] === true;
       var input = el('input', 'mdv-switch');
       input.type = 'checkbox';
       input.setAttribute('role', 'switch');
       input.dataset.pref = key;
       input.checked = prefs.get()[key];
+      input.disabled = locked;
       // The click, not change: after a script's input.click() Chrome fires a
       // trusted change event, but the click itself is untrusted and can be
       // refused (preventDefault puts the switch back).
       input.addEventListener('click', function (e) {
-        if (!e.isTrusted) {
+        // locked is checked here as well, since a script can re-enable the
+        // input or move it
+        if (!e.isTrusted || locked) {
           e.preventDefault();
           return;
         }
@@ -197,7 +231,7 @@
         patch[key] = input.checked;
         prefs.set(patch);
       });
-      var r = el('label', 'mdv-set-row mdv-toggle-row');
+      var r = el('label', 'mdv-set-row mdv-toggle-row' + (locked ? ' mdv-locked' : ''));
       var text = el('span', 'mdv-set-text');
       var l = el('span', 'mdv-set-label', label);
       l.id = nextId('label');
@@ -511,6 +545,21 @@
 
     /* ------------------------------------------------ your data */
 
+    // The background worker keeps the "Show as plain text" choices in
+    // memory; Reset asks it to forget them. Resolves either way.
+    function askWorker() {
+      return new Promise(function (done) {
+        try {
+          global.chrome.runtime.sendMessage({ hushmark: 'reset' }, function () {
+            void global.chrome.runtime.lastError;
+            done();
+          });
+        } catch (err) {
+          done();
+        }
+      });
+    }
+
     function dataRow() {
       var r = el('div', 'mdv-set-row mdv-set-row-stacked');
       var text = el('div', 'mdv-set-text');
@@ -579,7 +628,7 @@
       }));
       confirmBtn.addEventListener('click', trusted(function () {
         askReset(false);
-        options.fileAccess.deleteAll().then(function () {
+        options.fileAccess.deleteAll().then(askWorker).then(function () {
           prefs.reset();
           report(IS_LOCAL
             ? 'All Hushmark data in this browser was removed.'
@@ -609,12 +658,28 @@
       row('Line width', 'Full uses the whole window; the others keep lines short for reading.', segmented(widthItems, 'width'), true)
     ]);
 
+    // On a website: say why some switches are read-only, and link to the
+    // settings page where they can be changed.
+    var lockedNote = null;
+    if (IS_WEB_PAGE) {
+      lockedNote = el('div', 'mdv-set-locked');
+      var lockedText = el('p', 'mdv-set-locked-text', 'On a website, the editing, local-file and privacy switches are read-only here, so the site cannot change them. Change them in Hushmark\u2019s settings page.');
+      var openPage = button('mdv-set-action', 'Open settings page');
+      openPage.addEventListener('click', trusted(function () {
+        try {
+          global.chrome.runtime.sendMessage({ hushmark: 'open-options' });
+        } catch (err) { /* extension updated or removed since the page loaded */ }
+      }));
+      lockedNote.append(lockedText, openPage);
+    }
+
     var editing = section('Editing', 'edit', [
       toggle('Autosave', 'Saves 2 seconds after you stop typing, once the file is linked.', 'autosave'),
       toggle('Spell check', "Uses the browser's spell checker. With Chrome's Enhanced spell check on, Chrome sends the text to Google.", 'spellcheck')
     ]);
 
-    var websites = section('Websites', 'globe', [
+    var websites = section('Files and websites', 'globe', [
+      toggle('Format Markdown in other local files', 'Text files on your computer that are not named .md, such as notes.txt or README, open formatted when they look like Markdown. Code, logs and data files never do.', 'anyFile'),
       toggle('Format Markdown files on websites', 'Raw .md files on websites open formatted. When off, Hushmark runs on a website only when you click its toolbar button.', 'webPages')
     ]);
 
@@ -625,7 +690,7 @@
       yourData
     ], 'Hushmark reads the file you open only to show and edit it in this tab, and sends nothing anywhere. Images a file embeds from the web load only if you choose. Settings are stored in this browser on this computer.');
 
-    body.append(appearance, editing, websites, privacy);
+    body.append.apply(body, [appearance, lockedNote, editing, websites, privacy].filter(Boolean));
     panel.append(head, body);
 
     /* ------------------------------------------- support footer */
@@ -672,8 +737,13 @@
       if (options.onClose) options.onClose();
     });
     panel.addEventListener('mousedown', function (e) {
-      if (e.target === panel) panel.close(); // the backdrop
+      if (!options.page && e.target === panel) panel.close(); // the backdrop
     });
+
+    // the settings page: shown in place, not as a modal drawer
+    panel.openPage = function () {
+      if (!panel.open) panel.show();
+    };
 
     panel.openDrawer = function () {
       if (panel.open) return;

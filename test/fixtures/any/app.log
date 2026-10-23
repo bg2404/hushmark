@@ -1,0 +1,4 @@
+# Server log
+2026-10-23 10:00:01 INFO started on [port](http://localhost:8080)
+2026-10-23 10:00:02 WARN slow request
+2026-10-23 10:00:03 INFO done

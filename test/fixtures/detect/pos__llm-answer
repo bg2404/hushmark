@@ -1,0 +1,11 @@
+Here is a summary of the options.
+
+### Option A
+
+Fast to build, but **hard to maintain**. It needs `node` 20.
+
+### Option B
+
+Slower to build. It reuses the existing `api` module.
+
+**Recommendation:** go with option B.

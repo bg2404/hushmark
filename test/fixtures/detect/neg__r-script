@@ -1,0 +1,8 @@
+## Load data
+## ---------
+library(dplyr)
+df <- read.csv("data.csv")
+
+## Summarise
+summary(df)
+plot(df$x, df$y)

@@ -1,0 +1,8 @@
+# config
+name: demo
+version: 1.0
+steps:
+  - name: build
+    run: npm run build
+  - name: test
+    run: npm test

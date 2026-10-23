@@ -1,0 +1,13 @@
+From: a@example.com
+To: b@example.com
+Subject: Release notes
+Date: Mon, 1 Jan 2024 10:00:00 +0000
+
+## Release 1.2
+
+- Fixed [bug](https://example.com/b)
+- Added **feature**
+
+```
+code
+```

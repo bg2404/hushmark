@@ -6,3 +6,4 @@ test/output-e2e.log
 *.log
 dist/
 test/.store-profile/
+!test/fixtures/any/app.log

@@ -42,6 +42,7 @@ WHAT HUSHMARK READS AND KEEPS
 • All of its code ships inside the extension; nothing is downloaded or run from elsewhere.
 • Inline HTML in a file is cleaned before it is shown: scripts, forms and event handlers are removed.
 • Spell check is off by default. If you turn it on, the browser's own spell checker checks the text according to your browser settings.
+• Optional: format other text files on your computer that contain Markdown, such as notes.txt. It is off by default, it checks only files Chrome shows as plain text, and code, logs and data files are never formatted. Each such file has a "Show as plain text" button.
 
 FILES ON YOUR COMPUTER: ONE STEP AFTER INSTALLING
 Extensions cannot read files on your computer until you allow it:
@@ -86,7 +87,7 @@ Google Chrome is a trademark of Google LLC. Use of this trademark is subject to 
 
 The support address matches `supportUrl` in `extension/src/config.js`; change both together.
 
-(Counts, against Google's keyword-spam guidance: "Markdown" appears three times in the description and once in the summary; three brands are named.)
+(Counts, against Google's keyword-spam guidance: "Markdown" appears four times in the description and once in the summary; three brands are named.)
 
 ## Images
 
@@ -106,5 +107,5 @@ Regenerate them any time with `npm run store:assets`.
 
 ## Optional fields
 
-- **Homepage URL**: leave empty while the repository is private, or use the address where the privacy policy is published.
-- **Support URL**: your support page, or a public issues page if you make the repository public. Google expects meaningful support either way; the contact email on the listing covers it.
+- **Homepage URL**: https://github.com/bg2404/hushmark (the repository is public).
+- **Support URL**: https://github.com/bg2404/hushmark/issues Google expects meaningful support either way; the contact email on the listing covers it.

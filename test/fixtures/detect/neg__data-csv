@@ -1,0 +1,5 @@
+id,title,description
+1,Intro,"## Hello **world** see [x](https://example.com)"
+2,Setup,"- item one, - item two"
+3,Usage,"Run `tool`, then read [docs](https://example.com/d)"
+4,Faq,"Plain text, nothing else"

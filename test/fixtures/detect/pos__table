@@ -1,0 +1,8 @@
+Results of the benchmark run:
+
+| Case | Time | Memory |
+| ---- | ---: | -----: |
+| small | 1 ms | 2 MB |
+| large | 90 ms | 40 MB |
+
+Large inputs dominate.

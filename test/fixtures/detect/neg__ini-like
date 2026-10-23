@@ -1,0 +1,9 @@
+; settings
+[server]
+host = 127.0.0.1
+port = 8080
+
+# Logging
+[logging]
+level = info
+file = /tmp/app.log

@@ -1,0 +1,11 @@
+# Build stage
+# Uses the official image
+FROM node:20 AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+# Runtime stage
+FROM node:20-slim
+COPY --from=build /app /app
+CMD ["node", "server.js"]

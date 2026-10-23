@@ -1,0 +1,9 @@
+# Helper copied from a script
+# Run this once.
+import os
+
+def main():
+    print("[link](https://example.invalid)")
+
+# More
+main()

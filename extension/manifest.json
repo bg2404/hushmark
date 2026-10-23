@@ -17,7 +17,8 @@
   ],
   "host_permissions": [
     "http://*/*",
-    "https://*/*"
+    "https://*/*",
+    "file:///*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -29,6 +30,10 @@
       "32": "icons/icon32.png",
       "48": "icons/icon48.png"
     }
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {

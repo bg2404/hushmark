@@ -1,0 +1,9 @@
+name = "agent"
+model = "x"
+instructions = """
+## Role
+You review code. See [guide](https://example.com).
+
+- Be brief
+- Be kind
+"""

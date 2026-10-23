@@ -406,6 +406,7 @@ html[data-mdv] .mdv-content pre.mdv-frontmatter {
   }
 
   html[data-mdv] .mdv-top,
+  html[data-mdv] .mdv-notice,
   html[data-mdv] .mdv-format,
   html[data-mdv] .mdv-status,
   html[data-mdv] .mdv-toc,

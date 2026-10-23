@@ -1,0 +1,13 @@
+# Project
+
+A small tool that tidies Markdown notes before they are shared.
+
+## Install
+
+```sh
+npm install
+```
+
+## Use
+
+Run it from the folder that holds your notes. See [the guide](./guide.md).

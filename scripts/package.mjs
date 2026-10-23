@@ -39,7 +39,7 @@ if (!/^\d{1,5}(\.\d{1,5}){0,3}$/.test(manifest.version || '') || manifest.versio
 // Exactly the permissions the README, listing and privacy answers justify.
 const EXPECTED = {
   permissions: ['activeTab', 'scripting', 'storage'],
-  host_permissions: ['http://*/*', 'https://*/*'],
+  host_permissions: ['file:///*', 'http://*/*', 'https://*/*'],
 };
 for (const [key, expected] of Object.entries(EXPECTED)) {
   const actual = [...(manifest[key] || [])].sort();
@@ -53,8 +53,18 @@ for (const key of ['optional_permissions', 'optional_host_permissions']) {
 if (!manifest.background || !manifest.background.service_worker || !exists(manifest.background.service_worker)) {
   problems.push('background.service_worker is missing');
 }
-// the website gate the worker registers (src/background.js, WEB_GATE)
-if (!exists('src/web-gate.js')) problems.push('src/web-gate.js is missing');
+// the gates the worker registers (src/background.js, GATES)
+for (const file of ['src/web-gate.js', 'src/file-gate.js', 'src/looks-like-markdown.js']) {
+  if (!exists(file)) problems.push(`${file} is missing`);
+}
+// the settings page (options_ui), the only place websites cannot reach
+if (!manifest.options_ui || !manifest.options_ui.page || !exists(manifest.options_ui.page)) {
+  problems.push('options_ui.page (the settings page) is missing');
+} else {
+  for (const file of ['src/options.js', 'src/prefs.js', 'src/settings.js']) {
+    if (!exists(file)) problems.push(`${file} (used by the settings page) is missing`);
+  }
+}
 for (const [size, file] of Object.entries(manifest.icons || {})) {
   if (!exists(file)) problems.push(`icon ${size} missing: ${file}`);
 }

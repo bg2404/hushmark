@@ -28,15 +28,30 @@ inspected, not trusted on faith.
   (`src/web-gate.js`): on a page whose address ends in `.md` but that the
   site serves as HTML, it checks the page type and stops, without changing
   anything or loading the rest of Hushmark. It never runs inside frames.
+- **Other local files, only if you turn it on.** With "Format Markdown in
+  other local files" on (it is off by default), Hushmark also formats local
+  text files whose name does not say Markdown but whose content does, such
+  as `notes.txt` or a `README` with no extension. A second gate
+  (`src/file-gate.js`) runs on local files only while that setting is on. It
+  stops unless Chrome shows the file as plain text, its name and type are
+  not code, configuration, data or logs, and its text looks like Markdown
+  (the check reads the first 64 KB and the last 200 characters) (`src/looks-like-markdown.js`, checked against about 6,500 files
+  with no false positives). Such a file shows a "Show as plain text" button,
+  and that choice holds until you close Chrome.
 - **Asks only for what that needs, and says why.**
   - *Access to websites* (`http://*/*`, `https://*/*`) so it can format
     Markdown files on any site. Chrome shows this at install as "Read and
     change all your data on all websites". Hushmark uses it only on
     plain-text pages ending in a Markdown extension, or on a tab where you
     click its toolbar button.
-  - `scripting` to register that website script and to run the toolbar
-    button; `activeTab` so the button also works on the tab you clicked
-    when it is a local text file; `storage` for your settings.
+  - *Access to local files* (`file:///*`) so the worker can register the
+    local-file gate and load Hushmark into a file it picked out. Chrome shows
+    no extra warning for it, and it still needs Chrome's "Allow access to
+    file URLs" switch.
+  - `scripting` to register those gate scripts and to run the toolbar
+    button; `activeTab` so the button keeps working on the tab you click
+    if you restrict Hushmark's site access in Chrome; `storage` for your
+    settings.
   - Chrome's own "Allow access to file URLs" switch, which Chrome requires
     for any extension that touches local files.
 - **Makes no network requests of its own.** There are no update checks, no
@@ -57,7 +72,11 @@ inspected, not trusted on faith.
 - **Stores almost nothing, only on this computer.**
   - Your settings, in the extension's own storage (`chrome.storage.local`):
     changed only by your own clicks in Hushmark's Settings, never by web
-    pages or other local files, and removed when you uninstall. While
+    pages or other local files, and removed when you uninstall. On a
+    website, where the site's own scripts share the page, the switches for
+    privacy, editing and local files are read-only; they are changed in
+    Hushmark's settings page (`src/options.html`, also under Options in the
+    extension's menu), which no website can reach. While
     Hushmark shows a file from a website, that site's scripts can see the
     display settings applied to the page, such as the theme. (Earlier
     versions kept settings in the `localStorage` of `file://` pages; they
@@ -69,6 +88,9 @@ inspected, not trusted on faith.
     HTML files can read that, and uninstalling does not clear it, so it is
     off by default. Settings → "Forget saved files" and "Reset all Hushmark
     data", in a tab showing a local file, remove it.
+  - Files you turn back to plain text: their addresses, in the extension's
+    memory (`chrome.storage.session`), so a reload keeps them plain. Chrome
+    forgets them when it closes.
   - Nothing is ever written to a website's own storage.
 - **Ships all of its code.** Four widely used npm packages are vendored
   byte-for-byte from npm, with versions and SHA-256 hashes recorded in
@@ -77,7 +99,7 @@ inspected, not trusted on faith.
   (HTML back to Markdown). Chrome's Manifest V3 forbids remotely hosted code
   anyway; this extension has none.
 - **Is small enough to read.** Our own code lives in
-  [extension/src](extension/src): twelve commented JavaScript files and three
+  [extension/src](extension/src): fifteen commented JavaScript files, a settings page and three
   stylesheets, no build step, no minification.
 
 
@@ -174,11 +196,15 @@ Solarized Dark, Nord, Dracula, Gruvbox Dark and One Dark); resting the
 pointer on a theme, or moving to it with the arrow keys, previews it on the
 page, and it is kept only if you pick it. Then font (sans-serif, serif,
 monospace), text size and line width (full width by default, or a
-comfortable or narrow column). Editing has autosave and spell check, Websites
-has "Format Markdown files on websites" (on by default), and Privacy has
+comfortable or narrow column). Editing has autosave and spell check, Files and
+websites has "Format Markdown in other local files" (off by default) and
+"Format Markdown files on websites" (on by default), and Privacy has
 "Load web images automatically", "Remember saved files", "Forget saved files"
 (in a tab showing a local file) and "Reset all Hushmark data", which asks
-first. The "Buy me a coffee" link stays pinned to the bottom of the drawer. The status bar shows word and character counts,
+first. The "Buy me a coffee" link stays pinned to the bottom of the drawer.
+The same settings are also a page of their own, Hushmark's settings page
+(right-click the toolbar icon, then Options); on websites the privacy,
+editing and local-file switches can only be changed there. The status bar shows word and character counts,
 reading time and save state. Print styles hide the chrome.
 
 The layout is an app shell rather than a page: the bars stay put and the
@@ -260,6 +286,9 @@ extension/                what you load into Chrome
   src/settings.js         the Settings drawer: theme picker, toggles, data buttons, support link
   src/background.js       service worker: the website gate and the toolbar button
   src/web-gate.js         the only script registered for websites: loads Hushmark into plain-text .md pages only
+  src/file-gate.js        the local-file gate (setting off by default): other plain-text files that look like Markdown
+  src/options.html/.js    Hushmark's settings page, the same Settings outside any web page
+  src/looks-like-markdown.js  the content check the local-file gate uses (tests: test/detect.mjs)
   src/config.js           publisher settings (the optional support link)
   src/themes.css          colour themes and typography variables
   src/content.css         document styles

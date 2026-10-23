@@ -1,0 +1,7 @@
+# Overrides for the demo package
+
+# the word "function" appears inside an awk program
+bash-term-in-posix-shell 'function total(' [usr/share/demo/sum.sh:*]
+
+# false alarm from an older lintian release
+incorrect-path-for-interpreter /usr/bin/env python3 != /usr/bin/python3 [usr/lib/demo/tool]

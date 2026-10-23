@@ -1,0 +1,14 @@
+Project Name
+============
+
+This is a plain text readme.
+It wraps lines by hand at about seventy
+characters, like old READMEs did.
+
+Install
+-------
+
+  * run make
+  * run make install
+
+See http://example.com for more.

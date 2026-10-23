@@ -1,0 +1,13 @@
+Project
+=======
+
+Intro text with `a link <https://example.com>`_.
+
+Install
+-------
+
+.. code-block:: bash
+
+   pip install project
+
+.. note:: Something.

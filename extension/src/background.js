@@ -1,7 +1,7 @@
 /*
  * Hushmark — background.js (service worker)
  *
- * Three jobs, and nothing else:
+ * Four jobs, and nothing else:
  *
  * 1. Websites. While "Format Markdown files on websites" is on (the
  *    default), registers a small gate script (web-gate.js) for web addresses
@@ -11,15 +11,25 @@
  *    turned off the gate is unregistered, so no Hushmark code runs on
  *    websites at all.
  *
- * 2. The toolbar button. Clicking Hushmark's icon renders the current tab
- *    if it shows plain text (a raw Markdown file whose address does not end
- *    in .md, for example), whatever the setting. Other tabs get nothing.
+ * 2. Other local files. While "Format Markdown in other local files" is on
+ *    (off by default), registers a second gate (file-gate.js, with
+ *    looks-like-markdown.js) for local files. Files named .md never need it:
+ *    the manifest's own content script shows them. The gate leaves a file
+ *    alone unless Chrome shows it as plain text and its content looks like
+ *    Markdown; Hushmark is then loaded into that one document, with a "Show
+ *    as plain text" button. Files the user turns back to plain text are
+ *    remembered in chrome.storage.session (in memory, private to Hushmark,
+ *    gone when Chrome closes) so a reload keeps them plain.
  *
- * 3. The support link on sites that sandbox their files and so block new
+ * 3. The toolbar button. Clicking Hushmark's icon renders the current tab
+ *    if it shows plain text (a raw Markdown file whose address does not end
+ *    in .md, for example), whatever the settings. Other tabs get nothing.
+ *
+ * 4. The support link on sites that sandbox their files and so block new
  *    tabs: it opens the publisher's support page (config.js) for them.
  *
- * It makes no network requests and keeps no state of its own; the setting
- * is read from chrome.storage.local, where prefs.js keeps it.
+ * It makes no network requests. The settings are read from
+ * chrome.storage.local, where prefs.js keeps them.
  */
 'use strict';
 
@@ -29,10 +39,34 @@ importScripts('config.js');
 const SUPPORT_URL = (self.Hushmark.config && self.Hushmark.config.supportUrl) || '';
 
 const WEB_SCRIPT_ID = 'hushmark-web';
-const WEB_GATE = 'src/web-gate.js';
+const FILE_SCRIPT_ID = 'hushmark-files';
 const ENDINGS = ['md', 'MD', 'Md', 'markdown', 'Markdown', 'MARKDOWN', 'mdown', 'mkd', 'mkdn', 'mdwn', 'mdtxt', 'mdtext'];
 // "*://" covers http and https only. "?*" catches addresses with a query.
 const WEB_MATCHES = ENDINGS.flatMap((e) => ['*://*/*.' + e, '*://*/*.' + e + '?*']);
+
+// The gate scripts, each registered only while its setting is on.
+const GATES = [
+  {
+    id: WEB_SCRIPT_ID,
+    matches: WEB_MATCHES,
+    js: ['src/web-gate.js'],
+    enabled: (prefs) => !(prefs && prefs.webPages === false), // on unless turned off
+  },
+  {
+    id: FILE_SCRIPT_ID,
+    matches: ['file:///*'],
+    js: ['src/looks-like-markdown.js', 'src/file-gate.js'],
+    enabled: (prefs) => !!(prefs && prefs.anyFile), // off unless turned on
+  },
+];
+
+// Local files the user turned back to plain text, until Chrome closes.
+// Incognito tabs keep their own list, dropped when the last incognito
+// window closes, so an incognito choice never shows in normal windows.
+const PLAIN_KEY = 'plainFiles';
+const PLAIN_KEY_INCOGNITO = 'plainFilesIncognito';
+const PLAIN_MAX = 500;
+const plainKey = (incognito) => (incognito ? PLAIN_KEY_INCOGNITO : PLAIN_KEY);
 
 // The same files the manifest injects into local Markdown files.
 function contentFiles() {
@@ -40,32 +74,40 @@ function contentFiles() {
   return { js: cs.js, css: cs.css };
 }
 
-async function webPagesEnabled() {
+async function readPrefs() {
   const { prefs } = await chrome.storage.local.get('prefs');
-  return !(prefs && prefs.webPages === false); // on unless turned off
+  return prefs || null;
 }
 
 let syncing = Promise.resolve();
 
-// Registers or unregisters the website script to match the setting.
-// Calls are queued so two quick changes cannot race.
-function syncWebScript() {
+// Registers or unregisters each gate to match its setting. Calls are queued
+// so two quick changes cannot race.
+function syncScripts() {
   syncing = syncing.then(async () => {
-    const enabled = await webPagesEnabled();
-    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [WEB_SCRIPT_ID] });
-    if (enabled && !existing.length) {
-      await chrome.scripting.registerContentScripts([{
-        id: WEB_SCRIPT_ID,
-        matches: WEB_MATCHES,
-        js: [WEB_GATE],
-        runAt: 'document_end',
-        allFrames: false,
-        persistAcrossSessions: true,
-      }]);
-    } else if (!enabled && existing.length) {
-      await chrome.scripting.unregisterContentScripts({ ids: [WEB_SCRIPT_ID] });
+    const prefs = await readPrefs();
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: GATES.map((g) => g.id) });
+    const registered = new Set(existing.map((s) => s.id));
+    for (const gate of GATES) {
+      const on = gate.enabled(prefs);
+      try {
+        if (on && !registered.has(gate.id)) {
+          await chrome.scripting.registerContentScripts([{
+            id: gate.id,
+            matches: gate.matches,
+            js: gate.js,
+            runAt: 'document_end',
+            allFrames: false,
+            persistAcrossSessions: true,
+          }]);
+        } else if (!on && registered.has(gate.id)) {
+          await chrome.scripting.unregisterContentScripts({ ids: [gate.id] });
+        }
+      } catch (err) {
+        console.error('[Hushmark] could not update the script ' + gate.id, err);
+      }
     }
-  }).catch((err) => console.error('[Hushmark] could not update the website script', err));
+  }).catch((err) => console.error('[Hushmark] could not update the scripts', err));
   return syncing;
 }
 
@@ -75,18 +117,60 @@ chrome.runtime.onInstalled.addListener((details) => {
     // are ever imported (see prefs.js).
     chrome.storage.local.set({ legacyChecked: true });
   }
-  // An update may change the registered file list: register it afresh.
+  // An update may change the registered file lists: register them afresh.
   syncing = syncing
-    .then(() => chrome.scripting.unregisterContentScripts({ ids: [WEB_SCRIPT_ID] }))
+    .then(() => chrome.scripting.getRegisteredContentScripts({ ids: GATES.map((g) => g.id) }))
+    .then((existing) => existing.length && chrome.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) }))
     .catch(() => {});
-  syncWebScript();
+  syncScripts();
 });
-chrome.runtime.onStartup.addListener(syncWebScript);
+chrome.runtime.onStartup.addListener(syncScripts);
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.prefs) {
-    syncWebScript();
+    syncScripts();
   }
 });
+
+// A local file's address without its #fragment, as remembered below.
+function fileKey(url) {
+  const u = new URL(url);
+  u.hash = '';
+  return u.href;
+}
+
+function isFileUrl(url) {
+  return typeof url === 'string' && url.startsWith('file:');
+}
+
+async function shownPlain(url, incognito) {
+  const store = plainKey(incognito);
+  const { [store]: list = [] } = await chrome.storage.session.get(store);
+  return list.includes(fileKey(url));
+}
+
+async function setShownPlain(url, plain, incognito) {
+  const key = fileKey(url);
+  const store = plainKey(incognito);
+  const { [store]: list = [] } = await chrome.storage.session.get(store);
+  const next = list.filter((k) => k !== key);
+  if (plain) {
+    next.push(key);
+  }
+  await chrome.storage.session.set({ [store]: next.slice(-PLAIN_MAX) });
+}
+
+async function forgetIncognitoIfClosed() {
+  const windows = await chrome.windows.getAll();
+  if (!windows.some((w) => w.incognito)) {
+    await chrome.storage.session.remove(PLAIN_KEY_INCOGNITO);
+  }
+}
+chrome.windows.onRemoved.addListener(() => { forgetIncognitoIfClosed().catch(() => {}); });
+
+// Pages of Hushmark itself (the settings page).
+function isOwnPage(url) {
+  return typeof url === 'string' && url.startsWith(chrome.runtime.getURL(''));
+}
 
 // Loads Hushmark into one document: the stylesheets first, then the scripts.
 async function inject(target, files) {
@@ -94,15 +178,55 @@ async function inject(target, files) {
   await chrome.scripting.executeScript({ target, files: files.js });
 }
 
-// The gate found a plain-text Markdown file in a tab's top frame. Load
-// Hushmark into exactly that document, not whatever the tab shows by now.
-chrome.runtime.onMessage.addListener((msg, sender) => {
+// The file gate found a local file whose content looks like Markdown. The
+// setting and the user's "Show as plain text" choice are checked again here.
+async function renderDetected(sender, named) {
+  const prefs = await readPrefs();
+  if (!(prefs && prefs.anyFile)) {
+    return;
+  }
+  const target = { tabId: sender.tab.id, documentIds: [sender.documentId] };
+  if (named) {
+    // a Markdown name the manifest's patterns miss (notes.MKD): a normal render
+    await inject(target, contentFiles());
+    return;
+  }
+  if (await shownPlain(sender.url, sender.tab.incognito)) {
+    return;
+  }
+  await chrome.scripting.executeScript({ target, func: () => { window.__hushmarkDetected = true; } });
+  await inject(target, contentFiles());
+}
+
+// A gate found a plain-text file in a tab's top frame. Load Hushmark into
+// exactly that document, not whatever the tab shows by now.
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || sender.id !== chrome.runtime.id || !sender.tab) {
     return;
   }
-  if (msg.hushmark === 'render-web' && sender.frameId === 0 && sender.documentId) {
+  const top = sender.frameId === 0 && sender.documentId;
+  if (msg.hushmark === 'render-web' && top) {
     inject({ tabId: sender.tab.id, documentIds: [sender.documentId] }, contentFiles())
       .catch((err) => console.error('[Hushmark] could not show this file', err));
+  }
+  if (msg.hushmark === 'render-file' && top && isFileUrl(sender.url)) {
+    renderDetected(sender, msg.named === true).catch((err) => console.error('[Hushmark] could not show this file', err));
+  }
+  // "Show as plain text" on a file formatted because of its content: keep
+  // it plain on reload until Chrome closes, then let the tab reload.
+  if (msg.hushmark === 'show-plain' && top && isFileUrl(sender.url)) {
+    setShownPlain(sender.url, true, sender.tab.incognito).then(() => reply(true), () => reply(false));
+    return true; // replies asynchronously
+  }
+  // Settings → Reset all Hushmark data: also forget the plain-text choices.
+  if (msg.hushmark === 'reset' && (isFileUrl(sender.url) || isOwnPage(sender.url))) {
+    chrome.storage.session.remove([PLAIN_KEY, PLAIN_KEY_INCOGNITO]).then(() => reply(true), () => reply(false));
+    return true;
+  }
+  // On a website, privacy settings are changed in Hushmark's own settings
+  // page, which no website can script.
+  if (msg.hushmark === 'open-options') {
+    chrome.runtime.openOptionsPage().catch(() => {});
   }
   // The Settings support link, on a sandboxed site that cannot open tabs.
   // It only ever opens the publisher's own address, never one it is sent.
@@ -111,19 +235,22 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
-// The same test as web-gate.js, run in the tab by the toolbar button.
-// 'shown' when Hushmark already shows this tab.
+// The same test as web-gate.js, run in the tab by the toolbar button:
+// { state: 'shown' | true | false, href }, 'shown' when Hushmark already
+// shows this tab.
 function tabShowsPlainText() {
+  const href = location.href;
   if (document.documentElement.hasAttribute('data-mdv')) {
-    return 'shown';
+    return { state: 'shown', href };
   }
   const type = document.contentType || '';
   const body = document.body;
   if (document instanceof XMLDocument || /html|xml/i.test(type) || !body) {
-    return false;
+    return { state: false, href };
   }
-  return body.childElementCount === 0 ? !body.textContent.trim()
+  const plain = body.childElementCount === 0 ? !body.textContent.trim()
     : body.childElementCount === 1 && body.firstElementChild.tagName === 'PRE';
+  return { state: plain, href };
 }
 
 async function flashBadge(tabId, text, title) {
@@ -143,11 +270,18 @@ async function renderTab(tabId) {
     // Look first, and touch nothing unless the tab shows plain text. Later
     // steps are pinned to the document that was checked.
     const [check] = await chrome.scripting.executeScript({ target: { tabId }, func: tabShowsPlainText });
-    if (check && check.result === 'shown') {
+    const state = check && check.result && check.result.state;
+    if (state === 'shown') {
       return true;
     }
-    if (check && check.result === true) {
+    if (state === true) {
       const target = check.documentId ? { tabId, documentIds: [check.documentId] } : { tabId };
+      if (isFileUrl(check.result.href)) {
+        // asked for by the user: a file once turned back to plain text may
+        // be formatted again
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        await setShownPlain(check.result.href, false, !!(tab && tab.incognito)).catch(() => {});
+      }
       await chrome.scripting.executeScript({ target, func: () => { window.__hushmarkForce = true; } });
       await inject(target, contentFiles());
       // content.js renders asynchronously once the settings have loaded
@@ -177,4 +311,5 @@ chrome.action.onClicked.addListener((tab) => {
 
 // For the end-to-end tests, which cannot click the toolbar.
 self.renderTab = renderTab;
-self.syncWebScript = syncWebScript;
+self.syncScripts = syncScripts;
+self.plainState = { shownPlain, setShownPlain, forgetIncognitoIfClosed };

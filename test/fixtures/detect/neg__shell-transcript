@@ -1,0 +1,8 @@
+$ npm install
+added 120 packages in 3s
+$ npm test
+> demo@1.0.0 test
+> vitest run
+
+ ✓ src/a.test.ts (3 tests)
+ Test Files  1 passed (1)

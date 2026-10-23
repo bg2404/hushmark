@@ -1,0 +1,10 @@
+project('demo', 'c', version : '0.3.0', default_options : ['warning_level=2'])
+
+# Libraries found on the build machine
+glib = dependency('glib-2.0', version : '>= 2.70')
+
+# All sources that make up the library
+sources = files('src/one.c', 'src/two.c', 'src/three.c')
+
+# Build and install the shared library
+library('demo', sources, dependencies : glib, install : true)

@@ -875,6 +875,63 @@ try {
       check('web: scripts on the page cannot change settings', JSON.stringify(await getPrefs()) === before && await page.evaluate(() => !['dracula', 'nord', 'one-dark'].includes(document.documentElement.getAttribute('data-mdv-theme')) && document.querySelector('.mdv-set-confirm').hidden), JSON.stringify(await getPrefs()));
       await page.reload();
       await page.waitForFunction(() => document.documentElement.getAttribute('data-mdv') === 'rendered', null, { timeout: 5000 }).catch(() => {});
+
+      // a site could still steer a real click, so on websites the switches
+      // that affect privacy, editing or local files are read-only
+      {
+        // a blob: page the site makes itself, formatted by the toolbar button
+        const popupP = context.waitForEvent('page');
+        await page.evaluate(() => { window.__blob = window.open(URL.createObjectURL(new Blob(['# Notes\n\nSome text.\n'], { type: 'text/plain' }))); });
+        const blob = await popupP;
+        await blob.waitForLoadState();
+        const done = await sw.evaluate(async () => {
+          // Chrome hides blob: addresses from tabs.query: ask each tab's page
+          for (const t of await chrome.tabs.query({})) {
+            const [r] = await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => location.protocol }).catch(() => [{}]);
+            if (r && r.result === 'blob:') return self.renderTab(t.id);
+          }
+          return 'no tab';
+        });
+        const st = await blob.evaluate(() => ({ mdv: document.documentElement.getAttribute('data-mdv'), locked: [...document.querySelectorAll('.mdv-settings input.mdv-switch')].filter((i) => i.disabled).map((i) => i.dataset.pref).sort() }));
+        check('web: a blob: page a site made is locked like a website', done === true && st.mdv === 'rendered' && JSON.stringify(st.locked) === JSON.stringify(['anyFile', 'autosave', 'rememberFiles', 'remoteImages', 'spellcheck']), JSON.stringify({ done, st }));
+        await blob.close();
+      }
+      const lockState = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.mdv-settings input.mdv-switch')].map((i) => [i.dataset.pref, i.disabled])));
+      check('web: privacy, editing and local-file switches are read-only on a website', lockState.anyFile && lockState.remoteImages && lockState.rememberFiles && lockState.spellcheck && lockState.autosave && lockState.webPages === false, JSON.stringify(lockState));
+      await page.click('.mdv-settings-toggle');
+      const before2 = JSON.stringify(await getPrefs());
+      await page.evaluate(() => { const i = document.querySelector('input[data-pref="remoteImages"]'); i.disabled = false; i.focus(); });
+      await page.keyboard.press('Space'); // a real key press on a re-enabled switch
+      await page.waitForTimeout(200);
+      check('web: ... even re-enabled by a script and pressed for real', JSON.stringify(await getPrefs()) === before2, JSON.stringify(await getPrefs()));
+      const opened = context.waitForEvent('page', { timeout: 4000 }).catch(() => null);
+      await page.evaluate(() => document.querySelector('.mdv-set-locked button').click()); // a script: ignored
+      await page.click('.mdv-set-locked button');
+      const optionsPage = await opened;
+      check('web: Settings links to Hushmark\'s own settings page', !!optionsPage && /^chrome-extension:\/\/[a-p]{32}\/src\/options\.html$/.test(optionsPage.url()), optionsPage && optionsPage.url());
+      if (optionsPage) {
+        await optionsPage.waitForTimeout(800); // past the settings page's input delay
+        const st = await optionsPage.evaluate(() => ({ title: document.querySelector('.mdv-settings-page h1')?.textContent, switches: [...document.querySelectorAll('input.mdv-switch')].map((i) => i.dataset.pref + (i.disabled ? ':locked' : '')) }));
+        check('options: the settings page shows every switch, none read-only', st.title === 'Hushmark settings' && st.switches.length === 6 && !st.switches.some((x) => /locked/.test(x)), JSON.stringify(st));
+        await optionsPage.locator('label.mdv-toggle-row', { hasText: 'Spell check' }).locator('input').check();
+        await optionsPage.waitForTimeout(200);
+        check('options: ... and changes them', ((await getPrefs()) || {}).spellcheck === true);
+        await optionsPage.locator('label.mdv-toggle-row', { hasText: 'Spell check' }).locator('input').uncheck();
+        await optionsPage.waitForTimeout(200);
+        // just after the page comes to the front (here: a focus event), a
+        // click is not taken: it may have been aimed at the page before
+        await optionsPage.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await optionsPage.click('label.mdv-toggle-row:has-text("Spell check")');
+        const early = ((await getPrefs()) || {}).spellcheck;
+        await optionsPage.waitForTimeout(700);
+        await optionsPage.click('label.mdv-toggle-row:has-text("Spell check")');
+        const later = ((await getPrefs()) || {}).spellcheck;
+        check('options: a click in the first half second after the page comes to the front is ignored, a later one is not', early === false && later === true, JSON.stringify({ early, later }));
+        await optionsPage.waitForTimeout(100);
+        await optionsPage.click('label.mdv-toggle-row:has-text("Spell check")');
+        await optionsPage.close();
+      }
+      await page.keyboard.press('Escape');
       check('web: Settings on a website has no Forget button, and says why', await page.evaluate(() => ![...document.querySelectorAll('.mdv-settings button')].some((b) => /Forget saved files/.test(b.textContent)) && /open one to forget them/.test(document.querySelector('.mdv-settings').textContent)));
     }
     check('web: nothing is written to the website\'s storage', await page.evaluate(async () => localStorage.length === 0 && sessionStorage.length === 0 && (await indexedDB.databases()).length === 0));
@@ -977,6 +1034,135 @@ try {
     await clearPrefs();
     await A.close();
     await B.close();
+  }
+
+  // -------------------------------- other local files (opt-in, any name)
+  {
+    const anyUrl = (name) => pathToFileURL(join(fixtures, 'any', name)).href;
+    const filesGate = () => sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ['hushmark-files'] })).length === 1);
+    // opens a file and reports how it is shown; keep: leave the page open
+    async function look(url, keep) {
+      const p = await context.newPage();
+      const errs = [];
+      p.on('pageerror', (e) => errs.push(String(e)));
+      await p.goto(url);
+      await p.waitForTimeout(450);
+      const r = await p.evaluate(() => ({
+        mdv: document.documentElement.getAttribute('data-mdv'),
+        claim: document.documentElement.hasAttribute('data-mdv-claim'),
+        roots: document.querySelectorAll('.mdv-root').length,
+        bar: !!document.querySelector('.mdv-detected .mdv-show-plain'),
+      }));
+      r.errors = errs;
+      if (!keep) await p.close();
+      return keep ? { page: p, ...r } : r;
+    }
+
+    await clearPrefs();
+    check('any file: off by default, with no gate registered', !(await filesGate()) && (await look(anyUrl('notes.txt'))).mdv === null);
+
+    await setPrefs({ anyFile: true });
+    check('any file: turning it on registers the local-file gate', await waitFor(filesGate));
+    const notes = await look(anyUrl('notes.txt'), true);
+    check('any file: a .txt that looks like Markdown is formatted', notes.mdv === 'rendered' && notes.roots === 1 && (await notes.page.textContent('.mdv-content h1')).includes('Trip notes') && notes.errors.length === 0, JSON.stringify(notes.errors));
+    check('any file: ... and says so, with "Show as plain text"', notes.bar && /looks like Markdown/.test(await notes.page.textContent('.mdv-detected')));
+    const readme = await look(anyUrl('README'));
+    check('any file: an extensionless README is formatted', readme.mdv === 'rendered' && readme.bar);
+    for (const [name, what] of [['script.py', 'a .py file with "# comment" lines'], ['snippet.txt', 'Python code in a .txt'], ['app.log', 'a log file']]) {
+      const r = await look(anyUrl(name));
+      check(`any file: ${what} is never formatted`, r.mdv === null && !r.claim && r.roots === 0, JSON.stringify(r));
+    }
+    {
+      // short.MKD would fail the content check: a Markdown name skips it
+      const r = await look(anyUrl('short.MKD'));
+      check('any file: a Markdown name the manifest patterns miss (short.MKD) renders normally, without the check or the bar', r.mdv === 'rendered' && r.roots === 1 && !r.bar, JSON.stringify(r));
+    }
+    {
+      // the save dialog: no Markdown-only filter for a file not named .md
+      const world = await isolatedWorld(notes.page);
+      await world.eval(`window.__pickOpts = []; window.showOpenFilePicker = (o) => { window.__pickOpts.push(o); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; true`);
+      await notes.page.click('button[data-mode="source"]');
+      await notes.page.focus('.mdv-source');
+      await notes.page.keyboard.type(' ');
+      await notes.page.keyboard.press('Meta+s');
+      await notes.page.waitForTimeout(300);
+      const opts = await world.eval('JSON.stringify(window.__pickOpts)');
+      check('any file: saving a .txt opens the file dialog without a Markdown-only filter', /^\[\{"multiple":false\}\]$/.test(opts), opts);
+      await notes.page.keyboard.press('Meta+z');
+      await notes.page.click('button[data-mode="read"]');
+      await world.detach();
+      // print: the bar is not printed
+      await notes.page.emulateMedia({ media: 'print' });
+      check('any file: the "formatted because" bar is not printed', await notes.page.evaluate(() => getComputedStyle(document.querySelector('.mdv-detected')).display === 'none'));
+      await notes.page.emulateMedia({ media: 'screen' });
+    }
+    {
+      const r = await look(fileUrl('plain.txt'));
+      check('any file: a .txt with only a heading stays plain', r.mdv === null && r.roots === 0);
+      const md = await look(fileUrl('basic.md'));
+      check('any file: .md files still render once, through the manifest script, without the bar', md.mdv === 'rendered' && md.roots === 1 && !md.bar);
+    }
+
+    // a wrong guess is one click away from plain text, until Chrome closes
+    notes.page.once('dialog', (d) => d.accept()); // in case the stray edit above left the page dirty
+    await Promise.all([notes.page.waitForEvent('load'), notes.page.click('.mdv-show-plain')]);
+    await notes.page.waitForTimeout(450);
+    check('any file: "Show as plain text" shows Chrome\'s plain text again', await notes.page.evaluate(() => !document.documentElement.hasAttribute('data-mdv') && document.body.firstElementChild.tagName === 'PRE' && !document.querySelector('.mdv-root')));
+    await notes.page.reload();
+    await notes.page.waitForTimeout(450);
+    check('any file: ... and a reload keeps it plain', await notes.page.evaluate(() => !document.documentElement.hasAttribute('data-mdv')));
+    check('any file: the choice is kept in memory only (storage.session), never on disk', (await sw.evaluate(async () => (await chrome.storage.session.get('plainFiles')).plainFiles)).includes(anyUrl('notes.txt')) && !JSON.stringify(await sw.evaluate(() => chrome.storage.local.get(null))).includes('notes.txt'));
+    const again = await sw.evaluate(async (u) => { const [tab] = await chrome.tabs.query({ url: u }); return self.renderTab(tab.id); }, anyUrl('notes.txt'));
+    check('any file: the toolbar button still formats it on request', again === true && await notes.page.evaluate(() => document.documentElement.getAttribute('data-mdv') === 'rendered' && !document.querySelector('.mdv-detected')));
+    await notes.page.reload();
+    await notes.page.waitForTimeout(450);
+    check('any file: ... which also undoes "Show as plain text"', await notes.page.evaluate(() => document.documentElement.getAttribute('data-mdv') === 'rendered'));
+
+    // a script on the page cannot press "Show as plain text"
+    const before = await sw.evaluate(async () => (await chrome.storage.session.get('plainFiles')).plainFiles || []);
+    await notes.page.evaluate(() => document.querySelector('.mdv-show-plain').click());
+    await notes.page.waitForTimeout(300);
+    check('any file: a script cannot press "Show as plain text"', JSON.stringify(before) === JSON.stringify(await sw.evaluate(async () => (await chrome.storage.session.get('plainFiles')).plainFiles || [])) && await notes.page.evaluate(() => document.documentElement.getAttribute('data-mdv') === 'rendered'));
+
+    // (incognito: see the last block, which runs a real incognito window)
+
+    // Reset forgets the plain-text choices too
+    {
+      const fill = () => sw.evaluate(async (u) => { await self.plainState.setShownPlain(u, true, false); await self.plainState.setShownPlain(u, true, true); }, anyUrl('README'));
+      await fill();
+      const r = await context.newPage();
+      await r.goto(fileUrl('basic.md'));
+      await r.waitForTimeout(300);
+      await r.click('.mdv-settings-toggle');
+      await r.click('.mdv-settings button:has-text("Reset all Hushmark data")');
+      await r.click('.mdv-settings button:has-text("Reset everything")');
+      await r.waitForTimeout(400);
+      const left = await sw.evaluate(() => chrome.storage.session.get(null));
+      check('any file: Reset all Hushmark data also forgets "Show as plain text" choices, incognito ones too', Object.keys(left).length === 0, JSON.stringify(left));
+      await r.close();
+      await fill();
+      const o = await context.newPage();
+      await o.goto(`chrome-extension://${new URL(sw.url()).host}/src/options.html`);
+      await o.waitForTimeout(800); // the settings page ignores input for its first half second
+      await o.click('button:has-text("Reset all Hushmark data")');
+      await o.click('button:has-text("Reset everything")');
+      await o.waitForTimeout(400);
+      const left2 = await sw.evaluate(() => chrome.storage.session.get(null));
+      check('any file: ... also when reset from Hushmark\'s settings page', Object.keys(left2).length === 0, JSON.stringify(left2));
+      await o.close();
+      await setPrefs({ anyFile: true });
+      await waitFor(filesGate);
+    }
+
+    // the switch in Settings turns it off again
+    await notes.page.click('.mdv-settings-toggle');
+    check('any file: Settings has the switch, named by its label', (await notes.page.getByRole('switch', { name: 'Format Markdown in other local files', exact: true }).count()) === 1);
+    await notes.page.locator('.mdv-settings label.mdv-toggle-row', { hasText: 'Format Markdown in other local files' }).locator('input').uncheck();
+    await notes.page.keyboard.press('Escape');
+    check('any file: turning it off unregisters the gate', await waitFor(async () => !(await filesGate())));
+    check('any file: ... and other files stay plain again', (await look(anyUrl('README'))).mdv === null);
+    await notes.page.close();
+    await clearPrefs();
   }
 
   // ------------------------------- Escape in Settings over a narrow outline
@@ -1335,6 +1521,89 @@ Disguised: ![a](https:remote.invalid/a.png) ![b](https:/remote.invalid/b.png) ![
     } finally {
       rmSync(join(fixtures, 'large.md'), { force: true });
     }
+  }
+  // --------------------- with Chrome's "Allow access to file URLs" off
+  // (last: changing it reloads the extension)
+  {
+    const id = new URL(sw.url()).host;
+    await setPrefs({ anyFile: true });
+    await waitFor(() => sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ['hushmark-files'] })).length === 1));
+    const ext = await context.newPage();
+    await ext.goto('chrome://extensions/');
+    // Developer mode first: without it, Chrome disables a command-line
+    // extension when its file access changes, and the check would test nothing.
+    const call = (fn, arg) => ext.evaluate(([f, a]) => new Promise((done) => {
+      try {
+        chrome.developerPrivate[f](a, (r) => done(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : (r || true)));
+      } catch (err) { done({ error: String(err) }); }
+    }), [fn, arg]).catch((err) => ({ error: String(err) }));
+    const info = () => ext.evaluate((extId) => new Promise((done) => chrome.developerPrivate.getExtensionInfo(extId, (i) => done({ state: i.state, fileAccess: i.fileAccess.isActive }))), id);
+    const shown = async () => {
+      const seen = [];
+      for (const url of [fileUrl('basic.md'), pathToFileURL(join(fixtures, 'any', 'notes.txt')).href]) {
+        const p = await context.newPage();
+        await p.goto(url);
+        await p.waitForTimeout(700);
+        seen.push(await p.evaluate(() => document.documentElement.hasAttribute('data-mdv') || document.documentElement.hasAttribute('data-mdv-claim')));
+        await p.close();
+      }
+      return seen;
+    };
+    await call('updateProfileConfiguration', { inDeveloperMode: true });
+    await call('updateExtensionConfiguration', { extensionId: id, fileAccess: false });
+    await ext.waitForTimeout(1200);
+    const offInfo = await info();
+    const off = await shown();
+    check('file access off: Hushmark stays enabled, with file access off', offInfo.state === 'ENABLED' && offInfo.fileAccess === false, JSON.stringify(offInfo));
+    check('file access off: no local file is touched, .md or otherwise', off.every((x) => !x), JSON.stringify(off));
+    await call('updateExtensionConfiguration', { extensionId: id, fileAccess: true });
+    await ext.waitForTimeout(1500);
+    const on = await shown();
+    check('file access back on: both files are formatted again (so the check above can fail)', on.every((x) => x), JSON.stringify(on));
+
+    // A real incognito window: its "Show as plain text" is kept apart from
+    // normal windows, and dropped when the last incognito window closes.
+    await call('updateExtensionConfiguration', { extensionId: id, incognitoAccess: true });
+    await ext.waitForTimeout(1500);
+    let live = null;
+    for (let i = 0; i < 40 && !live; i++) {
+      for (const w of context.serviceWorkers().filter((x) => x.url().startsWith(`chrome-extension://${id}/`)).reverse()) {
+        if (await w.evaluate(() => 1).catch(() => 0)) { live = w; break; }
+      }
+      if (!live) await new Promise((r) => setTimeout(r, 100));
+    }
+    if (live) {
+      const notesUrl = pathToFileURL(join(fixtures, 'any', 'notes.txt')).href;
+      await live.evaluate(() => chrome.storage.local.set({ prefs: { anyFile: true } }));
+      await new Promise((r) => setTimeout(r, 500));
+      const res = await live.evaluate(async (u) => {
+        const out = {};
+        const win = await chrome.windows.create({ incognito: true, url: u });
+        const tabId = win.tabs[0].id;
+        for (let i = 0; i < 30; i++) {
+          const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: () => !!document.querySelector('.mdv-show-plain') }).catch(() => [{ result: false }]);
+          if (r && r.result) break;
+          await new Promise((d) => setTimeout(d, 100));
+        }
+        // the message the "Show as plain text" button sends, from that tab
+        await chrome.scripting.executeScript({ target: { tabId }, func: () => new Promise((d) => chrome.runtime.sendMessage({ hushmark: 'show-plain' }, d)) });
+        out.kept = await chrome.storage.session.get(null);
+        await chrome.windows.remove(win.id);
+        await new Promise((d) => setTimeout(d, 800));
+        out.afterClose = await chrome.storage.session.get(null);
+        return out;
+      }, notesUrl);
+      const p = await context.newPage();
+      await p.goto(notesUrl);
+      await p.waitForTimeout(700);
+      const normal = await p.evaluate(() => document.documentElement.getAttribute('data-mdv'));
+      await p.close();
+      check('incognito: "Show as plain text" there is kept apart from normal windows', JSON.stringify(res.kept.plainFilesIncognito) === JSON.stringify([notesUrl]) && !res.kept.plainFiles && normal === 'rendered', JSON.stringify({ kept: res.kept, normal }));
+      check('incognito: ... and forgotten when the last incognito window closes', !res.afterClose.plainFilesIncognito, JSON.stringify(res.afterClose));
+    } else {
+      check('incognito: the extension came back after allowing incognito', false, 'no live service worker');
+    }
+    await ext.close();
   }
   check('privacy: zero http(s) requests across the entire run', allRemote.length === 0, allRemote.slice(0, 5).join(', '));
 } finally {

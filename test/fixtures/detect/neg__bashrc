@@ -1,0 +1,11 @@
+# Shell setup
+# See [the docs](https://example.com/docs) for details.
+export PATH="$HOME/bin:$PATH"
+export EDITOR=vim
+
+# Aliases
+alias ll='ls -la'
+alias gs='git status'
+
+# Prompt
+PS1='\u@\h:\w$ '

@@ -1,0 +1,7 @@
+# App settings
+APP_NAME=demo
+APP_PORT=8080
+
+# Feature flags
+FEATURE_X=true
+FEATURE_Y=false

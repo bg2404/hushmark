@@ -152,7 +152,12 @@
     var saveBtn = IS_WEB
       ? button(labelled('save', 'Download'), 'mdv-save', function () { save(); }, 'Download a copy (' + MOD + 'S)')
       : button(labelled('save', 'Save'), 'mdv-save', function () { save(); }, 'Save (' + MOD + 'S)');
-    var settingsBtn = iconButton('settings', 'Settings', function () { toggleSettings(); });
+    var settingsBtn = iconButton('settings', 'Settings', function (e) {
+      if (e && e.isTrusted === false) {
+        return; // only the user's own click opens Settings
+      }
+      toggleSettings();
+    });
     settingsBtn.classList.add('mdv-settings-toggle');
     settingsBtn.setAttribute('aria-expanded', 'false');
     actions.append(tocBtn, saveBtn, settingsBtn);
@@ -206,6 +211,23 @@
     var noticeText = el('span', 'mdv-notice-text');
     notice.append(noticeText, button('Load images', 'mdv-text-btn mdv-load-remote', function () { loadRemote(); }, 'Load the images, video and audio this file embeds from the web'));
 
+    // A file formatted because of its content, not its name: say so, and
+    // offer the way back before an edit can save Markdown over it.
+    var detectedBar = null;
+    if (opts.detected) {
+      detectedBar = el('div', 'mdv-notice mdv-detected');
+      detectedBar.setAttribute('role', 'note');
+      detectedBar.append(
+        el('span', 'mdv-notice-text', 'Hushmark formatted this file because it looks like Markdown.'),
+        button('Show as plain text', 'mdv-text-btn mdv-show-plain', function (e) {
+          if (e && e.isTrusted === false) {
+            return; // only the user's own click
+          }
+          showPlain();
+        }, 'Show this file as plain text again, until you close Chrome')
+      );
+    }
+
     var scrim = el('div', 'mdv-scrim');
     scrim.hidden = true;
     scrim.addEventListener('click', function (e) { if (e.isTrusted) closeOverlays(); });
@@ -222,7 +244,7 @@
     });
     editor.toolbar.hidden = true;
 
-    root.append(top, editor.toolbar, notice, main, footer, scrim, settings, pre);
+    root.append.apply(root, [top, editor.toolbar, detectedBar, notice, main, footer, scrim, settings, pre].filter(Boolean));
     pre.hidden = true;
 
     /* ------------------------------------------------------ rendering */
@@ -248,6 +270,18 @@
         noticeText.textContent = count === 1
           ? 'Hushmark did not load 1 image from ' + where + ', so no server learns this file was opened.'
           : 'Hushmark did not load ' + count + ' images from ' + where + ', so no server learns this file was opened.';
+      }
+    }
+
+    // The worker remembers the choice (in memory, until Chrome closes), and
+    // the reload then shows Chrome's own plain-text view. Unsaved edits
+    // still get Chrome's leave-page warning.
+    function showPlain() {
+      var reload = function () { global.location.reload(); };
+      try {
+        global.chrome.runtime.sendMessage({ hushmark: 'show-plain' }, reload);
+      } catch (err) {
+        reload();
       }
     }
 

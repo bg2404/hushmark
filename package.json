@@ -2,16 +2,17 @@
   "name": "hushmark",
   "version": "1.0.0",
   "private": true,
-  "description": "Privacy-first Chrome extension that renders local Markdown files. Dev dependencies are used only to vendor libraries and run tests; the extension itself has no build step.",
+  "description": "Privacy-first Chrome extension that renders and edits Markdown files, local and on the web. Dev dependencies are used only to vendor libraries and run tests; the extension itself has no build step.",
   "type": "module",
   "scripts": {
     "vendor": "node scripts/vendor.mjs",
-    "test": "node test/e2e.mjs",
-    "test:headed": "HEADED=1 node test/e2e.mjs",
+    "test": "node test/detect.mjs && node test/e2e.mjs",
+    "test:headed": "node test/detect.mjs && HEADED=1 node test/e2e.mjs",
     "vendor:check": "node scripts/vendor.mjs --check",
     "package": "node scripts/package.mjs",
     "store:assets": "node scripts/store-assets.mjs",
-    "store:policy": "node scripts/privacy-page.mjs"
+    "store:policy": "node scripts/privacy-page.mjs",
+    "test:detect": "node test/detect.mjs"
   },
   "devDependencies": {
     "dompurify": "3.4.17",

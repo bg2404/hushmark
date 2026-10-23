@@ -1,0 +1,14 @@
+## Common tasks
+
+.PHONY: help build test
+
+help: ## Show this help
+	@grep -E '^[a-z]+:.*##' $(MAKEFILE_LIST)
+
+build: ## Build the app
+	npm run build
+
+## Testing
+
+test: ## Run tests
+	npm test

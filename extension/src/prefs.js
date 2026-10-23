@@ -66,6 +66,7 @@
     rememberFiles: false,  // keep file handles between visits (stores file addresses)
     remoteImages: false,   // load images, video and audio from other sites automatically
     webPages: true,        // format Markdown files on websites automatically
+    anyFile: false,        // format other local text files that look like Markdown
     splitRatio: 0.5
   };
 
@@ -89,6 +90,7 @@
     p.rememberFiles = !!p.rememberFiles;
     p.remoteImages = !!p.remoteImages;
     p.webPages = p.webPages !== false;
+    p.anyFile = !!p.anyFile;
     return p;
   }
 

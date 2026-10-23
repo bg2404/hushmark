@@ -1,0 +1,8 @@
+# Start a throwaway Redis for the tests
+docker run --rm -d -p 6379:6379 redis:7
+
+# Load the sample fixtures into the database
+python manage.py loaddata fixtures/sample.json --verbosity 2
+
+# Tail the worker output from the cluster
+kubectl logs -f deploy/worker -n jobs --since 10m
