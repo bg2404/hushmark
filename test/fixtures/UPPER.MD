@@ -1,0 +1,3 @@
+# Upper case extension
+
+Rendered.

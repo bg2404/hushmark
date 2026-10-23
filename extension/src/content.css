@@ -1,0 +1,429 @@
+/*
+ * Local Markdown Viewer — content.css
+ *
+ * Styles for the rendered document. Every rule is scoped to html[data-mdv],
+ * which app.js sets only after it has rendered a Markdown file; on any other
+ * page this stylesheet has no effect. Colours and fonts come from the
+ * variables in themes.css.
+ */
+
+html[data-mdv],
+html[data-mdv] body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* the app shell scrolls its own content area */
+  background: var(--mdv-bg);
+  color: var(--mdv-fg);
+}
+
+html[data-mdv] body {
+  font-family: var(--mdv-font-body);
+  font-size: var(--mdv-font-size, 16px);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+html[data-mdv] [hidden] {
+  display: none !important;
+}
+
+html[data-mdv] ::selection {
+  background: var(--mdv-selection);
+}
+
+/* ---- document column --------------------------------------------------- */
+
+/* Full width by default; the width preference sets --mdv-max-width. */
+html[data-mdv] .mdv-doc {
+  position: relative;        /* table tools are positioned against this */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--mdv-max-width);
+  margin: 0 auto;
+  padding: 1.75rem 2.5rem 4rem;
+  font-size: var(--mdv-font-size, 16px); /* the app chrome is smaller; the document is not */
+}
+
+html[data-mdv] .mdv-empty {
+  padding: 3rem 0;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] .mdv-empty p { margin: 0 0 1rem; }
+
+@media (max-width: 900px) {
+  html[data-mdv] .mdv-doc {
+    padding: 1.25rem 1.5rem 3rem;
+  }
+}
+
+@media (max-width: 640px) {
+  html[data-mdv] .mdv-doc {
+    padding: 1rem 1rem 3rem;
+  }
+
+  html[data-mdv] .mdv-anchor {
+    display: none; /* would sit half off-screen */
+  }
+}
+
+/* The original plain text Chrome produced, kept hidden for reference. */
+html[data-mdv] .mdv-root > pre {
+  display: none;
+}
+
+/* ---- rendered document ------------------------------------------------ */
+
+html[data-mdv] .mdv-content {
+  display: block;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+html[data-mdv] .mdv-content > :first-child {
+  margin-top: 0 !important;
+}
+
+html[data-mdv] .mdv-content > :last-child {
+  margin-bottom: 0 !important;
+}
+
+html[data-mdv] .mdv-content p,
+html[data-mdv] .mdv-content blockquote,
+html[data-mdv] .mdv-content ul,
+html[data-mdv] .mdv-content ol,
+html[data-mdv] .mdv-content dl,
+html[data-mdv] .mdv-content table,
+html[data-mdv] .mdv-content pre,
+html[data-mdv] .mdv-content details {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+/* headings */
+
+html[data-mdv] .mdv-content h1,
+html[data-mdv] .mdv-content h2,
+html[data-mdv] .mdv-content h3,
+html[data-mdv] .mdv-content h4,
+html[data-mdv] .mdv-content h5,
+html[data-mdv] .mdv-content h6 {
+  position: relative;
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+html[data-mdv] .mdv-content h1 {
+  padding-bottom: 0.3em;
+  font-size: 2em;
+  border-bottom: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-content h2 {
+  padding-bottom: 0.3em;
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-content h3 { font-size: 1.25em; }
+html[data-mdv] .mdv-content h4 { font-size: 1em; }
+html[data-mdv] .mdv-content h5 { font-size: 0.875em; }
+html[data-mdv] .mdv-content h6 { font-size: 0.85em; color: var(--mdv-muted); }
+
+html[data-mdv] .mdv-anchor {
+  position: absolute;
+  right: 100%;
+  padding-right: 0.3em;
+  font-weight: 400;
+  line-height: inherit;
+  color: var(--mdv-muted);
+  text-decoration: none;
+  opacity: 0;
+}
+
+html[data-mdv] .mdv-content h1:hover .mdv-anchor,
+html[data-mdv] .mdv-content h2:hover .mdv-anchor,
+html[data-mdv] .mdv-content h3:hover .mdv-anchor,
+html[data-mdv] .mdv-content h4:hover .mdv-anchor,
+html[data-mdv] .mdv-content h5:hover .mdv-anchor,
+html[data-mdv] .mdv-content h6:hover .mdv-anchor,
+html[data-mdv] .mdv-anchor:focus {
+  opacity: 1;
+}
+
+/* text */
+
+html[data-mdv] .mdv-content a {
+  color: var(--mdv-link);
+  text-decoration: none;
+}
+
+html[data-mdv] .mdv-content a:hover {
+  text-decoration: underline;
+}
+
+html[data-mdv] .mdv-content strong,
+html[data-mdv] .mdv-content b { font-weight: 600; }
+
+html[data-mdv] .mdv-content hr {
+  height: 0.25em;
+  margin: 1.5rem 0;
+  padding: 0;
+  background: var(--mdv-border);
+  border: 0;
+}
+
+html[data-mdv] .mdv-content blockquote {
+  padding: 0 1em;
+  color: var(--mdv-muted);
+  border-left: 0.25em solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-content blockquote > :first-child { margin-top: 0; }
+html[data-mdv] .mdv-content blockquote > :last-child { margin-bottom: 0; }
+
+html[data-mdv] .mdv-content mark {
+  padding: 0 0.15em;
+  background: var(--mdv-mark-bg);
+  color: var(--mdv-mark-fg);
+}
+
+html[data-mdv] .mdv-content sup,
+html[data-mdv] .mdv-content sub {
+  font-size: 75%;
+  line-height: 0;
+}
+
+/* lists */
+
+html[data-mdv] .mdv-content ul,
+html[data-mdv] .mdv-content ol {
+  padding-left: 2em;
+}
+
+html[data-mdv] .mdv-content ul ul,
+html[data-mdv] .mdv-content ul ol,
+html[data-mdv] .mdv-content ol ol,
+html[data-mdv] .mdv-content ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+html[data-mdv] .mdv-content li + li {
+  margin-top: 0.25em;
+}
+
+html[data-mdv] .mdv-content li > p {
+  margin-top: 1rem;
+}
+
+html[data-mdv] .mdv-content li:has(> input[type="checkbox"]:first-child),
+html[data-mdv] .mdv-content li:has(> p:first-child > input[type="checkbox"]:first-child) {
+  list-style-type: none;
+}
+
+html[data-mdv] .mdv-content li > input[type="checkbox"]:first-child,
+html[data-mdv] .mdv-content li > p:first-child > input[type="checkbox"]:first-child {
+  margin: 0 0.35em 0.25em -1.45em;
+  vertical-align: middle;
+}
+
+html[data-mdv] .mdv-content dt { font-weight: 600; margin-top: 1rem; }
+html[data-mdv] .mdv-content dd { margin-left: 0; padding-left: 1em; }
+
+/* code */
+
+html[data-mdv] .mdv-content code,
+html[data-mdv] .mdv-content kbd,
+html[data-mdv] .mdv-content pre,
+html[data-mdv] .mdv-content samp,
+html[data-mdv] .mdv-content tt {
+  font-family: var(--mdv-font-mono);
+}
+
+html[data-mdv] .mdv-content code {
+  padding: 0.2em 0.4em;
+  font-size: 85%;
+  white-space: break-spaces;
+  background: var(--mdv-code-bg);
+  border-radius: 6px;
+}
+
+html[data-mdv] .mdv-content pre {
+  padding: 1rem;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  tab-size: 4;
+  white-space: pre;
+  background: var(--mdv-code-bg);
+  border-radius: 6px;
+}
+
+html[data-mdv] .mdv-content pre code {
+  display: inline;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  font-size: 100%;
+  line-height: inherit;
+  white-space: pre;
+  word-wrap: normal;
+  background: transparent;
+  border: 0;
+}
+
+html[data-mdv] .mdv-content kbd {
+  display: inline-block;
+  padding: 0.2em 0.4em;
+  font-size: 11px;
+  line-height: 10px;
+  vertical-align: middle;
+  color: var(--mdv-fg);
+  background: var(--mdv-code-bg);
+  border: 1px solid var(--mdv-border);
+  border-bottom-color: var(--mdv-kbd-shadow);
+  border-radius: 6px;
+  box-shadow: inset 0 -1px 0 var(--mdv-kbd-shadow);
+}
+
+/* tables */
+
+html[data-mdv] .mdv-content table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+html[data-mdv] .mdv-content th,
+html[data-mdv] .mdv-content td {
+  padding: 6px 13px;
+  border: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-content th {
+  font-weight: 600;
+}
+
+html[data-mdv] .mdv-content tr {
+  background: var(--mdv-bg);
+  border-top: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-content tbody tr:nth-child(2n) {
+  background: var(--mdv-alt-row);
+}
+
+/* media */
+
+html[data-mdv] .mdv-content img,
+html[data-mdv] .mdv-content video {
+  max-width: 100%;
+  box-sizing: content-box;
+}
+
+/* details */
+
+html[data-mdv] .mdv-content summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+html[data-mdv] .mdv-content details > :not(summary) {
+  margin-top: 0.5rem;
+}
+
+/* front matter */
+
+html[data-mdv] .mdv-content table.mdv-frontmatter {
+  width: auto;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+html[data-mdv] .mdv-content table.mdv-frontmatter th {
+  color: var(--mdv-muted);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  background: var(--mdv-code-bg);
+}
+
+html[data-mdv] .mdv-content pre.mdv-frontmatter {
+  margin-bottom: 1.5rem;
+  color: var(--mdv-muted);
+}
+
+/* ---- print ------------------------------------------------------------ */
+
+@media print {
+  /* paper is white whatever the theme */
+  html[data-mdv],
+  html[data-mdv][data-mdv-theme] {
+    color-scheme: light;
+    --mdv-bg: #ffffff;
+    --mdv-fg: #000000;
+    --mdv-muted: #444444;
+    --mdv-border: #bbbbbb;
+    --mdv-border-strong: #888888;
+    --mdv-code-bg: #f3f3f3;
+    --mdv-alt-row: #f7f7f7;
+    --mdv-link: #0b4ea2;
+    --mdv-mark-bg: #fff2a8;
+    --mdv-mark-fg: #000000;
+  }
+
+  html[data-mdv],
+  html[data-mdv] body,
+  html[data-mdv] .mdv-root,
+  html[data-mdv] .mdv-main,
+  html[data-mdv] .mdv-stage {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  html[data-mdv] .mdv-top,
+  html[data-mdv] .mdv-format,
+  html[data-mdv] .mdv-status,
+  html[data-mdv] .mdv-toc,
+  html[data-mdv] .mdv-settings,
+  html[data-mdv] .mdv-scrim,
+  html[data-mdv] .mdv-table-tools,
+  html[data-mdv] .mdv-source,
+  html[data-mdv] .mdv-divider,
+  html[data-mdv] .mdv-fm-note,
+  html[data-mdv] .mdv-dialog,
+  html[data-mdv] .mdv-anchor {
+    display: none !important;
+  }
+
+  html[data-mdv] .mdv-split,
+  html[data-mdv] .mdv-preview-scroll {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  html[data-mdv] .mdv-doc {
+    max-width: none;
+    padding: 0;
+  }
+
+  html[data-mdv] .mdv-content a {
+    color: inherit;
+    text-decoration: underline;
+  }
+
+  html[data-mdv] .mdv-content pre {
+    white-space: pre-wrap;
+  }
+}

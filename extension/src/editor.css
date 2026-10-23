@@ -1,0 +1,809 @@
+/*
+ * Local Markdown Viewer — editor.css
+ *
+ * The app shell: top bar, formatting toolbar, outline panel, content stage,
+ * source/preview split, status bar, settings drawer, dialogs. Scoped to
+ * html[data-mdv]; colours come from themes.css. Full width by default and
+ * responsive down to phone widths.
+ */
+
+/* ---- shell ------------------------------------------------------------- */
+
+html[data-mdv] .mdv-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  font-size: 0.8125rem; /* the chrome; the document column resets to the text-size preference */
+}
+
+html[data-mdv] .mdv-root svg.mdv-i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+html[data-mdv] .mdv-root button {
+  appearance: none;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+html[data-mdv] .mdv-root :focus-visible,
+html[data-mdv] .mdv-settings :focus-visible,
+html[data-mdv] .mdv-dialog :focus-visible {
+  outline: 2px solid var(--mdv-primary);
+  outline-offset: 2px;
+}
+
+html[data-mdv] .mdv-label {
+  white-space: nowrap;
+}
+
+/* a theme change must not animate: prefs.js sets this for one frame */
+html.mdv-theme-switching * {
+  transition: none !important;
+}
+
+/* ---- top bar ----------------------------------------------------------- */
+
+html[data-mdv] .mdv-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3rem;
+  padding: 0 0.75rem;
+  background: var(--mdv-surface);
+  border-bottom: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-file {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] .mdv-file svg.mdv-i {
+  color: var(--mdv-accent);
+}
+
+html[data-mdv] .mdv-filename {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mdv-font-mono);
+  color: var(--mdv-fg);
+}
+
+html[data-mdv] .mdv-dirty-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mdv-accent);
+}
+
+html[data-mdv] .mdv-modes {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 8px;
+}
+
+html[data-mdv] .mdv-modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.9rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mdv-fg);
+  font-weight: 500;
+}
+
+html[data-mdv] .mdv-modes button[aria-pressed="true"] {
+  background: var(--mdv-button-active);
+  color: var(--mdv-fg);
+}
+
+html[data-mdv] .mdv-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+html[data-mdv] .mdv-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mdv-fg);
+}
+
+html[data-mdv] .mdv-icon-btn[aria-pressed="true"],
+html[data-mdv] .mdv-icon-btn[aria-expanded="true"] {
+  background: var(--mdv-button-active);
+  border-color: var(--mdv-control-border);
+  box-shadow: inset 0 -2px 0 var(--mdv-primary);
+}
+
+html[data-mdv] .mdv-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+
+html[data-mdv] .mdv-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.1rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 6px;
+  background: var(--mdv-button-bg);
+  font-weight: 500;
+}
+
+html[data-mdv] .mdv-save.mdv-dirty {
+  background: var(--mdv-primary);
+  border-color: var(--mdv-primary);
+  color: var(--mdv-primary-fg);
+}
+
+html[data-mdv] .mdv-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---- formatting toolbar ------------------------------------------------ */
+
+html[data-mdv] .mdv-format {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0.3rem 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  background: var(--mdv-surface);
+  border-bottom: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-format button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mdv-fg);
+  font-size: 0.8rem;
+}
+
+html[data-mdv] .mdv-format button[aria-pressed="true"] {
+  background: var(--mdv-button-active);
+  border-color: var(--mdv-control-border);
+  box-shadow: inset 0 -2px 0 var(--mdv-primary);
+}
+
+html[data-mdv] .mdv-format .mdv-btn-bold { font-weight: 700; }
+html[data-mdv] .mdv-format .mdv-btn-italic { font-style: italic; font-family: var(--mdv-font-serif); }
+html[data-mdv] .mdv-format .mdv-btn-strike { text-decoration: line-through; }
+html[data-mdv] .mdv-format .mdv-btn-heading,
+html[data-mdv] .mdv-format .mdv-btn-paragraph { font-family: var(--mdv-font-mono); font-size: 0.75rem; font-weight: 600; }
+
+html[data-mdv] .mdv-sep {
+  flex: none;
+  width: 1px;
+  height: 1.25rem;
+  margin: 0 0.35rem;
+  background: var(--mdv-border);
+}
+
+/* ---- main: outline + stage / split ------------------------------------ */
+
+html[data-mdv] .mdv-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+html[data-mdv] .mdv-stage {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 1rem;
+}
+
+html[data-mdv] .mdv-stage:focus { outline: none; }
+
+html[data-mdv] .mdv-toc {
+  flex: none;
+  box-sizing: border-box;
+  width: 16rem;
+  overflow: auto;
+  padding: 1rem 0.5rem 2rem;
+  background: var(--mdv-surface);
+  border-right: 1px solid var(--mdv-border);
+}
+
+html[data-mdv] .mdv-toc-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.5rem;
+  padding-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] .mdv-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+html[data-mdv] .mdv-toc a {
+  display: block;
+  padding: 0.375rem 0.5rem;
+  border-radius: 4px;
+  color: var(--mdv-fg);
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+html[data-mdv] .mdv-toc a[aria-current] {
+  color: var(--mdv-primary);
+  background: var(--mdv-button-active);
+}
+
+html[data-mdv] .mdv-toc .mdv-toc-h1 a { font-weight: 600; }
+html[data-mdv] .mdv-toc .mdv-toc-h2 a { padding-left: 1.25rem; }
+html[data-mdv] .mdv-toc .mdv-toc-h3 a { padding-left: 2rem; color: var(--mdv-muted); }
+html[data-mdv] .mdv-toc .mdv-toc-h4 a { padding-left: 2.75rem; color: var(--mdv-muted); }
+html[data-mdv] .mdv-toc .mdv-toc-h3 a[aria-current],
+html[data-mdv] .mdv-toc .mdv-toc-h4 a[aria-current] { color: var(--mdv-primary); }
+html[data-mdv] .mdv-toc-empty { margin: 0; padding-left: 0.5rem; color: var(--mdv-muted); }
+
+/* ---- editing surface --------------------------------------------------- */
+
+html[data-mdv] .mdv-content.mdv-editing {
+  position: relative;
+  min-height: 60vh;
+  outline: none;
+  caret-color: var(--mdv-primary);
+  cursor: text;
+}
+
+html[data-mdv] .mdv-content.mdv-editing:has(> p:only-child > br:only-child)::before {
+  content: "Start writing\2026";
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--mdv-muted);
+  pointer-events: none;
+}
+
+html[data-mdv] .mdv-content.mdv-editing a { cursor: text; }
+html[data-mdv] .mdv-content.mdv-editing input[type="checkbox"] { cursor: pointer; }
+
+html[data-mdv] .mdv-content.mdv-editing th,
+html[data-mdv] .mdv-content.mdv-editing td {
+  min-width: 3rem;
+}
+
+html[data-mdv] .mdv-content.mdv-editing th:empty::before,
+html[data-mdv] .mdv-content.mdv-editing td:empty::before {
+  content: "\00a0";
+}
+
+html[data-mdv] .mdv-fm-note {
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.8125rem;
+  color: var(--mdv-muted);
+  background: var(--mdv-code-bg);
+  border: 1px dashed var(--mdv-border);
+  border-radius: 8px;
+}
+
+html[data-mdv] .mdv-fm-note summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+html[data-mdv] .mdv-fm-note pre {
+  margin: 0.5rem 0 0.25rem;
+  font-family: var(--mdv-font-mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+html[data-mdv] .mdv-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+html[data-mdv] .mdv-table-tools {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--mdv-surface-raised);
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 999px;
+  box-shadow: var(--mdv-shadow);
+}
+
+html[data-mdv] .mdv-table-tools button {
+  height: 2rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.75rem;
+}
+
+/* ---- source mode ------------------------------------------------------- */
+
+html[data-mdv] .mdv-split {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 8px 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+
+html[data-mdv] .mdv-source {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 1.25rem 1.5rem 3rem;
+  font-family: var(--mdv-font-mono);
+  font-size: calc(var(--mdv-font-size, 16px) * 0.875);
+  line-height: 1.6;
+  tab-size: 2;
+  color: var(--mdv-fg);
+  background: var(--mdv-code-bg);
+  border: 0;
+  outline: none;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+}
+
+html[data-mdv] .mdv-source:focus-visible {
+  outline: none;
+  box-shadow: inset 2px 0 0 var(--mdv-primary);
+}
+
+html[data-mdv] .mdv-divider {
+  position: relative;
+  background: var(--mdv-border);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+html[data-mdv] .mdv-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 2rem;
+  border-radius: 2px;
+  background: var(--mdv-control-border);
+  transform: translate(-50%, -50%);
+}
+
+html[data-mdv] .mdv-divider.mdv-dragging,
+html[data-mdv] .mdv-divider:focus-visible {
+  background: var(--mdv-primary);
+  outline: none;
+}
+
+html[data-mdv] .mdv-preview-scroll {
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---- status bar -------------------------------------------------------- */
+
+html[data-mdv] .mdv-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1.25rem;
+  min-height: 1.8rem;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--mdv-muted);
+  background: var(--mdv-surface);
+  border-top: 1px solid var(--mdv-border);
+  white-space: nowrap;
+}
+
+html[data-mdv] .mdv-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-mdv] .mdv-save-state {
+  display: block;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-mdv] .mdv-save-state:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--mdv-muted);
+  vertical-align: 0;
+}
+
+html[data-mdv] .mdv-save-state.mdv-ok::before { background: var(--mdv-accent); }
+html[data-mdv] .mdv-save-state.mdv-error { color: var(--mdv-danger); }
+html[data-mdv] .mdv-save-state.mdv-error::before { background: var(--mdv-danger); }
+
+/* a failure message gets the whole bar and may wrap */
+html[data-mdv] .mdv-status:has(.mdv-error) {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  white-space: normal;
+}
+
+html[data-mdv] .mdv-status:has(.mdv-error) .mdv-words,
+html[data-mdv] .mdv-status:has(.mdv-error) .mdv-hint {
+  display: none;
+}
+
+/* ---- scrim (narrow outline), settings drawer, dialogs ---------------- */
+
+html[data-mdv] .mdv-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+html[data-mdv] dialog.mdv-settings,
+html[data-mdv] dialog.mdv-dialog {
+  position: fixed;
+  padding: 0;
+  color: var(--mdv-fg);
+  font-size: 0.8125rem;
+  border: 0;
+  background: transparent;
+}
+
+html[data-mdv] dialog.mdv-settings::backdrop,
+html[data-mdv] dialog.mdv-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+html[data-mdv] dialog.mdv-settings {
+  inset: 0 0 0 auto;
+  box-sizing: border-box;
+  width: min(22rem, 100%);
+  height: 100%;
+  max-width: 100%;
+  max-height: none;
+  margin: 0;
+  overflow: auto;
+  padding: 0.75rem 1.25rem 1.5rem;
+  background: var(--mdv-surface-raised);
+  border-left: 1px solid var(--mdv-border);
+  box-shadow: var(--mdv-shadow);
+}
+
+html[data-mdv] .mdv-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+html[data-mdv] .mdv-settings-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+html[data-mdv] .mdv-settings h3 {
+  margin: 1.1rem 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] .mdv-settings .mdv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.45rem 0;
+}
+
+html[data-mdv] .mdv-settings select {
+  max-width: 10rem;
+  padding: 0.25rem 0.4rem;
+  font: inherit;
+  color: var(--mdv-fg);
+  background: var(--mdv-button-bg);
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 6px;
+}
+
+html[data-mdv] .mdv-theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+html[data-mdv] .mdv-theme-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: 1px solid var(--mdv-border);
+  border-radius: 8px;
+  background: var(--mdv-button-bg);
+  text-align: left;
+  font-size: 0.75rem;
+}
+
+html[data-mdv] .mdv-theme-swatch[aria-pressed="true"] {
+  border-color: var(--mdv-primary);
+  box-shadow: inset 0 0 0 1px var(--mdv-primary);
+}
+
+html[data-mdv] .mdv-swatch-bar {
+  display: flex;
+  height: 1.3rem;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+html[data-mdv] .mdv-swatch-bar span { flex: 1; }
+
+html[data-mdv] .mdv-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+html[data-mdv] .mdv-stepper output {
+  min-width: 2.6rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-mdv] .mdv-settings .mdv-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.45rem 0;
+}
+
+html[data-mdv] .mdv-settings .mdv-check input { margin: 0; }
+
+html[data-mdv] .mdv-text-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 6px;
+  background: var(--mdv-button-bg);
+}
+
+html[data-mdv] .mdv-settings-note {
+  margin: 1rem 0 0;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] dialog.mdv-dialog {
+  inset: 0;
+  width: min(26rem, calc(100% - 2rem));
+  max-width: calc(100% - 2rem);
+  margin: 10vh auto auto;
+}
+
+html[data-mdv] .mdv-popover {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  font-size: 0.875rem;
+  color: var(--mdv-fg);
+  background: var(--mdv-surface-raised);
+  border: 1px solid var(--mdv-border);
+  border-radius: 10px;
+  box-shadow: var(--mdv-shadow);
+}
+
+html[data-mdv] .mdv-popover-title {
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+html[data-mdv] .mdv-popover label {
+  display: block;
+  margin: 0.45rem 0;
+  font-size: 0.78rem;
+  color: var(--mdv-muted);
+}
+
+html[data-mdv] .mdv-popover input[type="text"] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--mdv-fg);
+  background: var(--mdv-bg);
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 6px;
+}
+
+html[data-mdv] .mdv-popover-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+html[data-mdv] .mdv-popover-actions button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--mdv-control-border);
+  border-radius: 6px;
+  background: var(--mdv-button-bg);
+}
+
+html[data-mdv] .mdv-popover-actions button[type="submit"] {
+  background: var(--mdv-primary);
+  border-color: var(--mdv-primary);
+  color: var(--mdv-primary-fg);
+}
+
+html[data-mdv] .mdv-popover-actions .mdv-spacer { flex: 1; }
+
+html[data-mdv] .mdv-popover-error {
+  min-height: 1.2em;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--mdv-danger);
+}
+
+/* ---- hover states (pointer devices only) ------------------------------ */
+
+@media (hover: hover) {
+  html[data-mdv] .mdv-modes button:hover { background: var(--mdv-button-bg); }
+  html[data-mdv] .mdv-icon-btn:hover:not(:disabled) { background: var(--mdv-button-active); }
+  html[data-mdv] .mdv-save:hover:not(:disabled) { border-color: var(--mdv-border-strong); }
+  html[data-mdv] .mdv-format button:hover { background: var(--mdv-button-active); }
+  html[data-mdv] .mdv-toc a:hover { background: var(--mdv-button-active); }
+  html[data-mdv] .mdv-table-tools button:hover { background: var(--mdv-button-active); }
+  html[data-mdv] .mdv-divider:hover { background: var(--mdv-primary); }
+  html[data-mdv] .mdv-theme-swatch:hover { border-color: var(--mdv-border-strong); }
+  html[data-mdv] .mdv-text-btn:hover { border-color: var(--mdv-border-strong); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-mdv] .mdv-modes button,
+  html[data-mdv] .mdv-icon-btn,
+  html[data-mdv] .mdv-save,
+  html[data-mdv] .mdv-format button { transition: background-color 0.12s, color 0.12s, border-color 0.12s; }
+}
+
+/* ---- responsive -------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  html[data-mdv] .mdv-toc {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 6;
+    width: min(18rem, 85%);
+    box-shadow: var(--mdv-shadow);
+  }
+
+  html[data-mdv] .mdv-toc a { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+
+  html[data-mdv] .mdv-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 45%) 8px minmax(0, 1fr);
+  }
+
+  html[data-mdv] .mdv-divider { cursor: row-resize; }
+  html[data-mdv] .mdv-divider::after { width: 2rem; height: 2px; }
+}
+
+@media (max-width: 640px) {
+  html[data-mdv] dialog.mdv-settings { width: 100%; border-left: 0; }
+  html[data-mdv] .mdv-top { gap: 0.5rem; padding: 0 0.5rem; }
+  html[data-mdv] .mdv-modes button { padding: 0 0.55rem; }
+  html[data-mdv] .mdv-modes .mdv-label,
+  html[data-mdv] .mdv-save .mdv-label,
+  html[data-mdv] .mdv-hint { display: none; }
+  html[data-mdv] .mdv-save { padding: 0 0.55rem; }
+  html[data-mdv] .mdv-save:not(.mdv-dirty) { border-color: transparent; background: transparent; }
+  html[data-mdv] .mdv-status { gap: 0.75rem; }
+
+  /* the toolbar scrolls sideways: fade the edge and drop the rarely used tools */
+  html[data-mdv] .mdv-format {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
+  }
+  html[data-mdv] .mdv-format.mdv-at-end { mask-image: none; -webkit-mask-image: none; }
+  html[data-mdv] .mdv-format button { min-width: 2.25rem; height: 2.25rem; }
+  html[data-mdv] .mdv-format .mdv-btn-heading[data-arg="3"],
+  html[data-mdv] .mdv-format .mdv-btn-paragraph,
+  html[data-mdv] .mdv-format .mdv-btn-hr,
+  html[data-mdv] .mdv-format .mdv-btn-clear,
+  html[data-mdv] .mdv-format .mdv-sep { display: none; }
+}
+
+@media (max-width: 480px) {
+  html[data-mdv] .mdv-file > svg.mdv-i { display: none; }
+  html[data-mdv] .mdv-top { gap: 0.375rem; }
+  html[data-mdv] .mdv-modes button { padding: 0 0.5rem; }
+  html[data-mdv] .mdv-actions { gap: 0.125rem; }
+}

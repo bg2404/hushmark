@@ -1,0 +1,324 @@
+/*
+ * Local Markdown Viewer — themes.css
+ *
+ * Colour themes and typography variables. The default follows the system
+ * light/dark setting; an explicit theme is chosen with data-mdv-theme on
+ * <html>, which prefs.js sets from the saved preference. Every colour the
+ * other stylesheets use comes from these variables.
+ */
+
+html[data-mdv] {
+  --mdv-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --mdv-font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, Georgia, "Times New Roman", serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --mdv-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --mdv-font-body: var(--mdv-font-sans);
+  --mdv-font-size: 16px;
+  --mdv-max-width: none;
+}
+
+html[data-mdv][data-mdv-font="serif"] { --mdv-font-body: var(--mdv-font-serif); }
+html[data-mdv][data-mdv-font="mono"]  { --mdv-font-body: var(--mdv-font-mono); }
+html[data-mdv][data-mdv-width="comfortable"] { --mdv-max-width: 68rem; }
+html[data-mdv][data-mdv-width="narrow"] { --mdv-max-width: 48rem; }
+
+/* ---- GitHub Light (also the "auto" theme in light mode) ---------------- */
+
+html[data-mdv],
+html[data-mdv][data-mdv-theme="github-light"] {
+  color-scheme: light;
+  --mdv-bg: #ffffff;
+  --mdv-fg: #1f2328;
+  --mdv-muted: #59636e;
+  --mdv-border: #d1d9e0;
+  --mdv-border-strong: #818b98;
+  --mdv-code-bg: #f6f8fa;
+  --mdv-alt-row: #f6f8fa;
+  --mdv-link: #0969da;
+  --mdv-accent: #1a7f37;
+  --mdv-danger: #cf222e;
+  --mdv-toolbar-bg: rgba(255, 255, 255, 0.92);
+  --mdv-panel-bg: #ffffff;
+  --mdv-button-bg: #f6f8fa;
+  --mdv-button-active: #dde3ea;
+  --mdv-kbd-shadow: #afb8c1;
+  --mdv-mark-bg: #fff8c5;
+  --mdv-mark-fg: #1f2328;
+  --mdv-selection: #b6d7ff;
+  --mdv-shadow: 0 8px 24px rgba(31, 35, 40, 0.15);
+  --mdv-control-border: #818b98;
+  --mdv-surface: #f6f8fa;
+  --mdv-surface-raised: #ffffff;
+  --mdv-primary: #0969da;
+  --mdv-primary-fg: #ffffff;
+}
+
+/* ---- GitHub Dark (also the "auto" theme in dark mode) ------------------ */
+
+@media (prefers-color-scheme: dark) {
+  html[data-mdv]:not([data-mdv-theme]),
+  html[data-mdv][data-mdv-theme="auto"] {
+    color-scheme: dark;
+    --mdv-bg: #0d1117;
+    --mdv-fg: #f0f6fc;
+    --mdv-muted: #9198a1;
+    --mdv-border: #3d444d;
+    --mdv-border-strong: #656c76;
+    --mdv-code-bg: #151b23;
+    --mdv-alt-row: #151b23;
+    --mdv-link: #4493f8;
+    --mdv-accent: #3fb950;
+    --mdv-danger: #f85149;
+    --mdv-toolbar-bg: rgba(13, 17, 23, 0.92);
+    --mdv-panel-bg: #161b22;
+    --mdv-button-bg: #21262d;
+    --mdv-button-active: #30363d;
+    --mdv-kbd-shadow: #3d444d;
+    --mdv-mark-bg: #9e6a03;
+    --mdv-mark-fg: #f0f6fc;
+    --mdv-selection: #1f4e85;
+    --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --mdv-control-border: #6b727b;
+    --mdv-surface: #161b22;
+    --mdv-surface-raised: #1c2128;
+    --mdv-primary: #4493f8;
+    --mdv-primary-fg: #0d1117;
+  }
+}
+
+html[data-mdv][data-mdv-theme="github-dark"] {
+  color-scheme: dark;
+  --mdv-bg: #0d1117;
+  --mdv-fg: #f0f6fc;
+  --mdv-muted: #9198a1;
+  --mdv-border: #3d444d;
+  --mdv-border-strong: #656c76;
+  --mdv-code-bg: #151b23;
+  --mdv-alt-row: #151b23;
+  --mdv-link: #4493f8;
+  --mdv-accent: #3fb950;
+  --mdv-danger: #f85149;
+  --mdv-toolbar-bg: rgba(13, 17, 23, 0.92);
+  --mdv-panel-bg: #161b22;
+  --mdv-button-bg: #21262d;
+  --mdv-button-active: #30363d;
+  --mdv-kbd-shadow: #3d444d;
+  --mdv-mark-bg: #9e6a03;
+  --mdv-mark-fg: #f0f6fc;
+  --mdv-selection: #1f4e85;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --mdv-control-border: #6b727b;
+  --mdv-surface: #161b22;
+  --mdv-surface-raised: #1c2128;
+  --mdv-primary: #4493f8;
+  --mdv-primary-fg: #0d1117;
+}
+
+/* ---- Solarized Light --------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="solarized-light"] {
+  color-scheme: light;
+  --mdv-bg: #fdf6e3;
+  --mdv-fg: #3e4d52;
+  --mdv-muted: #586b72;
+  --mdv-border: #cbc3a6;
+  --mdv-border-strong: #93a1a1;
+  --mdv-code-bg: #eee8d5;
+  --mdv-alt-row: #f5efdc;
+  --mdv-link: #2076b2;
+  --mdv-accent: #859900;
+  --mdv-danger: #b8322f;
+  --mdv-toolbar-bg: rgba(253, 246, 227, 0.92);
+  --mdv-panel-bg: #fdf6e3;
+  --mdv-button-bg: #eee8d5;
+  --mdv-button-active: #e4dcc3;
+  --mdv-kbd-shadow: #93a1a1;
+  --mdv-mark-bg: #b58900;
+  --mdv-mark-fg: #fdf6e3;
+  --mdv-selection: #e8e1c8;
+  --mdv-shadow: 0 8px 24px rgba(88, 110, 117, 0.2);
+  --mdv-control-border: #98823e;
+  --mdv-surface: #eee8d5;
+  --mdv-surface-raised: #fdf6e3;
+  --mdv-primary: #1b6498;
+  --mdv-primary-fg: #fdf6e3;
+}
+
+/* ---- Solarized Dark ---------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="solarized-dark"] {
+  color-scheme: dark;
+  --mdv-bg: #002b36;
+  --mdv-fg: #a6b3b3;
+  --mdv-muted: #8da0a7;
+  --mdv-border: #0b5467;
+  --mdv-border-strong: #586e75;
+  --mdv-code-bg: #073642;
+  --mdv-alt-row: #03333f;
+  --mdv-link: #3094da;
+  --mdv-accent: #859900;
+  --mdv-danger: #ef7a72;
+  --mdv-toolbar-bg: rgba(0, 43, 54, 0.92);
+  --mdv-panel-bg: #073642;
+  --mdv-button-bg: #073642;
+  --mdv-button-active: #0d4452;
+  --mdv-kbd-shadow: #586e75;
+  --mdv-mark-bg: #b58900;
+  --mdv-mark-fg: #002b36;
+  --mdv-selection: #0d4452;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --mdv-control-border: #1185a3;
+  --mdv-surface: #073642;
+  --mdv-surface-raised: #0b3a46;
+  --mdv-primary: #4ba3e3;
+  --mdv-primary-fg: #002b36;
+}
+
+/* ---- Nord -------------------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="nord"] {
+  color-scheme: dark;
+  --mdv-bg: #2e3440;
+  --mdv-fg: #eceff4;
+  --mdv-muted: #b6bcc9;
+  --mdv-border: #525c73;
+  --mdv-border-strong: #4c566a;
+  --mdv-code-bg: #3b4252;
+  --mdv-alt-row: #343b4a;
+  --mdv-link: #88c0d0;
+  --mdv-accent: #a3be8c;
+  --mdv-danger: #e5a0a6;
+  --mdv-toolbar-bg: rgba(46, 52, 64, 0.92);
+  --mdv-panel-bg: #3b4252;
+  --mdv-button-bg: #3b4252;
+  --mdv-button-active: #4c566a;
+  --mdv-kbd-shadow: #4c566a;
+  --mdv-mark-bg: #ebcb8b;
+  --mdv-mark-fg: #2e3440;
+  --mdv-selection: #434c5e;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --mdv-control-border: #838da6;
+  --mdv-surface: #3b4252;
+  --mdv-surface-raised: #434c5e;
+  --mdv-primary: #88c0d0;
+  --mdv-primary-fg: #2e3440;
+}
+
+/* ---- Dracula ----------------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="dracula"] {
+  color-scheme: dark;
+  --mdv-bg: #282a36;
+  --mdv-fg: #f8f8f2;
+  --mdv-muted: #afb5d7;
+  --mdv-border: #44475a;
+  --mdv-border-strong: #6272a4;
+  --mdv-code-bg: #21222c;
+  --mdv-alt-row: #2c2e3a;
+  --mdv-link: #8be9fd;
+  --mdv-accent: #50fa7b;
+  --mdv-danger: #ff5555;
+  --mdv-toolbar-bg: rgba(40, 42, 54, 0.92);
+  --mdv-panel-bg: #343746;
+  --mdv-button-bg: #44475a;
+  --mdv-button-active: #55586d;
+  --mdv-kbd-shadow: #6272a4;
+  --mdv-mark-bg: #f1fa8c;
+  --mdv-mark-fg: #282a36;
+  --mdv-selection: #44475a;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --mdv-control-border: #8995b8;
+  --mdv-surface: #21222c;
+  --mdv-surface-raised: #343746;
+  --mdv-primary: #8be9fd;
+  --mdv-primary-fg: #282a36;
+}
+
+/* ---- Gruvbox Dark ------------------------------------------------------ */
+
+html[data-mdv][data-mdv-theme="gruvbox-dark"] {
+  color-scheme: dark;
+  --mdv-bg: #282828;
+  --mdv-fg: #ebdbb2;
+  --mdv-muted: #bdae93;
+  --mdv-border: #58524f;
+  --mdv-border-strong: #665c54;
+  --mdv-code-bg: #3c3836;
+  --mdv-alt-row: #32302f;
+  --mdv-link: #83a598;
+  --mdv-accent: #b8bb26;
+  --mdv-danger: #fc7d6e;
+  --mdv-toolbar-bg: rgba(40, 40, 40, 0.92);
+  --mdv-panel-bg: #3c3836;
+  --mdv-button-bg: #3c3836;
+  --mdv-button-active: #504945;
+  --mdv-kbd-shadow: #504945;
+  --mdv-mark-bg: #fabd2f;
+  --mdv-mark-fg: #282828;
+  --mdv-selection: #504945;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --mdv-control-border: #89817c;
+  --mdv-surface: #3c3836;
+  --mdv-surface-raised: #45403d;
+  --mdv-primary: #83a598;
+  --mdv-primary-fg: #282828;
+}
+
+/* ---- One Dark ---------------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="one-dark"] {
+  color-scheme: dark;
+  --mdv-bg: #282c34;
+  --mdv-fg: #c8ccd4;
+  --mdv-muted: #9da5b4;
+  --mdv-border: #3e4452;
+  --mdv-border-strong: #5c6370;
+  --mdv-code-bg: #21252b;
+  --mdv-alt-row: #2c313a;
+  --mdv-link: #61afef;
+  --mdv-accent: #98c379;
+  --mdv-danger: #e5848b;
+  --mdv-toolbar-bg: rgba(40, 44, 52, 0.92);
+  --mdv-panel-bg: #2c313a;
+  --mdv-button-bg: #2c313a;
+  --mdv-button-active: #4b5263;
+  --mdv-kbd-shadow: #3e4452;
+  --mdv-mark-bg: #e5c07b;
+  --mdv-mark-fg: #282c34;
+  --mdv-selection: #3e4452;
+  --mdv-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --mdv-control-border: #7f848e;
+  --mdv-surface: #21252b;
+  --mdv-surface-raised: #2c313a;
+  --mdv-primary: #61afef;
+  --mdv-primary-fg: #282c34;
+}
+
+/* ---- Sepia ------------------------------------------------------------- */
+
+html[data-mdv][data-mdv-theme="sepia"] {
+  color-scheme: light;
+  --mdv-bg: #f4ecd8;
+  --mdv-fg: #5b4636;
+  --mdv-muted: #766248;
+  --mdv-border: #cbbb9b;
+  --mdv-border-strong: #bfae8f;
+  --mdv-code-bg: #ece2c8;
+  --mdv-alt-row: #efe6cf;
+  --mdv-link: #8b5a2b;
+  --mdv-accent: #6b8e23;
+  --mdv-danger: #a63d40;
+  --mdv-toolbar-bg: rgba(244, 236, 216, 0.92);
+  --mdv-panel-bg: #f4ecd8;
+  --mdv-button-bg: #ece2c8;
+  --mdv-button-active: #e0d3b8;
+  --mdv-kbd-shadow: #bfae8f;
+  --mdv-mark-bg: #ffe9a8;
+  --mdv-mark-fg: #5b4636;
+  --mdv-selection: #e6d9b8;
+  --mdv-shadow: 0 8px 24px rgba(91, 70, 54, 0.2);
+  --mdv-control-border: #917e66;
+  --mdv-surface: #ece2c8;
+  --mdv-surface-raised: #f8f1df;
+  --mdv-primary: #8b5a2b;
+  --mdv-primary-fg: #f8f1df;
+}

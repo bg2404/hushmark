@@ -1,0 +1,6 @@
+node_modules/
+test/.profile/
+test/output/
+.DS_Store
+test/output-e2e.log
+*.log
