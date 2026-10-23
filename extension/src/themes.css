@@ -186,7 +186,7 @@ html[data-mdv][data-mdv-theme="nord"] {
   --mdv-alt-row: #343b4a;
   --mdv-link: #88c0d0;
   --mdv-accent: #a3be8c;
-  --mdv-danger: #e5a0a6;
+  --mdv-danger: #ebb4b9;
   --mdv-toolbar-bg: rgba(46, 52, 64, 0.92);
   --mdv-panel-bg: #3b4252;
   --mdv-button-bg: #3b4252;
@@ -216,7 +216,7 @@ html[data-mdv][data-mdv-theme="dracula"] {
   --mdv-alt-row: #2c2e3a;
   --mdv-link: #8be9fd;
   --mdv-accent: #50fa7b;
-  --mdv-danger: #ff5555;
+  --mdv-danger: #ff8a8a;
   --mdv-toolbar-bg: rgba(40, 42, 54, 0.92);
   --mdv-panel-bg: #343746;
   --mdv-button-bg: #44475a;
@@ -246,7 +246,7 @@ html[data-mdv][data-mdv-theme="gruvbox-dark"] {
   --mdv-alt-row: #32302f;
   --mdv-link: #83a598;
   --mdv-accent: #b8bb26;
-  --mdv-danger: #fc7d6e;
+  --mdv-danger: #fd9a8d;
   --mdv-toolbar-bg: rgba(40, 40, 40, 0.92);
   --mdv-panel-bg: #3c3836;
   --mdv-button-bg: #3c3836;

@@ -1177,11 +1177,26 @@
       }
       var tr = table.getBoundingClientRect();
       var cr = container.getBoundingClientRect();
-      var top = tr.top - cr.top - tableTools.offsetHeight - 6;
-      if (top < 0) {
-        top = tr.bottom - cr.top + 6; // no room above: sit below the table
+      var w = tableTools.offsetWidth;
+      var h = tableTools.offsetHeight;
+      var gap = 8;
+      var left;
+      var top;
+      // Prefer the free space beside a narrow table, so nothing is covered.
+      if (tr.right + gap + w <= cr.right - gap) {
+        left = tr.right - cr.left + gap;
+        top = tr.top - cr.top;
+      } else {
+        // Otherwise above the table if the element before it leaves room,
+        // else below it.
+        left = Math.max(0, tr.left - cr.left);
+        var prev = table.previousElementSibling;
+        var roomAbove = prev ? tr.top - prev.getBoundingClientRect().bottom : tr.top - cr.top;
+        top = roomAbove >= h + gap
+          ? tr.top - cr.top - h - gap / 2
+          : tr.bottom - cr.top + gap / 2;
       }
-      tableTools.style.left = Math.max(0, tr.left - cr.left) + 'px';
+      tableTools.style.left = left + 'px';
       tableTools.style.top = top + 'px';
     }
 

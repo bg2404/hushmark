@@ -18,8 +18,8 @@
 
   function isChromePlainTextView() {
     var type = document.contentType || '';
-    if (type === 'text/html' || type === 'application/xhtml+xml') {
-      return false;
+    if (document instanceof XMLDocument || /html|xml/i.test(type)) {
+      return false; // HTML and XML documents, which can run their own scripts
     }
     var body = document.body;
     if (!body) {
@@ -64,18 +64,43 @@
   }
 
   function main() {
-    if (!api || typeof api.mount !== 'function') {
+    // Set by the toolbar button: render this tab even if its address does
+    // not end in a Markdown extension.
+    var forced = window.__hushmarkForce === true;
+    window.__hushmarkForce = false;
+    if (!api || typeof api.mount !== 'function' || !api.prefs) {
       return;
     }
-    if (document.documentElement.hasAttribute('data-mdv')) {
-      return; // already rendered
+    var html = document.documentElement;
+    if (html.hasAttribute('data-mdv') || html.hasAttribute('data-mdv-claim')) {
+      return; // already rendered, or being rendered
     }
-    if (!MARKDOWN_PATH.test(location.pathname)) {
+    if (!forced && !MARKDOWN_PATH.test(location.pathname)) {
       return;
     }
     if (!isChromePlainTextView()) {
       return;
     }
+    // Claim the page now, so a second injection (toolbar button plus the
+    // automatic script) cannot mount twice while the settings load.
+    html.setAttribute('data-mdv-claim', '');
+    api.prefs.load().then(function (prefs) {
+      // Automatic rendering on websites can be turned off in Settings; the
+      // background worker then stops injecting, and this check covers a tab
+      // that was already loading.
+      var web = location.protocol !== 'file:';
+      if (web && !forced && !prefs.webPages) {
+        html.removeAttribute('data-mdv-claim');
+        return;
+      }
+      if (api.fileAccess && api.fileAccess.settingsLoaded) {
+        api.fileAccess.settingsLoaded();
+      }
+      start();
+    });
+  }
+
+  function start() {
 
     var pre = document.body.firstElementChild;
     var source = pre.textContent;

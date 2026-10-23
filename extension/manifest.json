@@ -1,14 +1,34 @@
 {
   "manifest_version": 3,
   "name": "Hushmark",
-  "version": "2.0.0",
-  "description": "Private Markdown viewer and editor for files on your computer. Works offline: no network, no analytics, no permissions.",
+  "version": "2.1.0",
+  "description": "Private Markdown viewer and editor for files on your computer and on the web. No analytics, no tracking, no accounts.",
   "minimum_chrome_version": "105",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "Show this tab with Hushmark",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
   },
   "content_scripts": [
     {
@@ -36,9 +56,11 @@
         "src/render.js",
         "src/prefs.js",
         "src/icons.js",
+        "src/config.js",
         "src/markdown-out.js",
         "src/file-access.js",
         "src/editor.js",
+        "src/settings.js",
         "src/app.js",
         "src/content.js"
       ],

@@ -1,74 +1,105 @@
 # Hushmark
 
-*A private Markdown viewer and editor for Chrome. Zero permissions, and nothing leaves your computer.*
+*A private Markdown viewer and editor for Chrome, for files on your computer and on the web. Your text never leaves your browser.*
 
-A Chrome extension that shows Markdown files from your own computer as
-formatted documents, the way GitHub renders a README, and lets you edit them
+A Chrome extension that shows Markdown files, from your computer or raw files
+on the web, as formatted documents, the way GitHub renders a README, and lets you edit them
 in place: a WYSIWYG editor with a formatting bar and Markdown shortcuts, a
-side-by-side source editor, and saving straight back to the file. Ten colour
-themes, three font families, adjustable text size. An app-style layout that
+side-by-side source editor, and saving straight back to the file. Nine colour
+themes plus an automatic light/dark one, three font families, adjustable text size. An app-style layout that
 uses the whole window and works down to phone widths.
 
-It exists because most Markdown extensions want access to every website,
-bundle analytics, or pull code from a server. This one is built to be
+It exists because most Markdown extensions bundle analytics or pull code
+from a server. Hushmark does neither. It asks for website access only to
+format raw Markdown files, which you can turn off, and it is built to be
 inspected, not trusted on faith.
 
 ## Privacy
 
-- **Runs only on local Markdown files.** The content script matches
-  `file:///` URLs that end in `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`,
-  `.mdwn`, `.mdtxt` or `.mdtext` (Chrome's URL patterns are case-sensitive,
-  so `.MD`, `.Md`, `.Markdown` and `.MARKDOWN` are listed too). It never
-  runs on a website.
-- **Makes no network requests.** Nothing is fetched, there are no update
-  checks, no telemetry, no analytics. The test suite opens every fixture in a
-  real Chromium, edits and saves one of them through every mode, and fails
-  if any page in the whole run issues a single `http(s)` request.
+- **Runs on Markdown files, local and on the web.** On your computer it
+  matches `file:///` addresses ending in `.md`, `.markdown`, `.mdown`,
+  `.mkd`, `.mkdn`, `.mdwn`, `.mdtxt` or `.mdtext` (Chrome's URL patterns are
+  case-sensitive, so `.MD`, `.Md`, `.Markdown` and `.MARKDOWN` are listed
+  too). On websites it formats pages whose address ends the same way and
+  that the site serves as plain text, such as raw files on GitHub. Turn
+  "Format Markdown files on websites" off in Settings and
+  Hushmark's code no longer runs on websites at all: the background worker
+  unregisters the website script. That script is a short gate
+  (`src/web-gate.js`): on a page whose address ends in `.md` but that the
+  site serves as HTML, it checks the page type and stops, without changing
+  anything or loading the rest of Hushmark. It never runs inside frames.
+- **Asks only for what that needs, and says why.**
+  - *Access to websites* (`http://*/*`, `https://*/*`) so it can format
+    Markdown files on any site. Chrome shows this at install as "Read and
+    change all your data on all websites". Hushmark uses it only on
+    plain-text pages ending in a Markdown extension, or on a tab where you
+    click its toolbar button.
+  - `scripting` to register that website script and to run the toolbar
+    button; `activeTab` so the button also works on the tab you clicked
+    when it is a local text file; `storage` for your settings.
+  - Chrome's own "Allow access to file URLs" switch, which Chrome requires
+    for any extension that touches local files.
+- **Makes no network requests of its own.** There are no update checks, no
+  telemetry, no analytics, no accounts. The test suite opens every fixture
+  in a real Chromium, edits and saves them through every mode, and fails if
+  any page in the whole run sends a request off the computer, apart from the
+  stand-in website it serves itself and the images it deliberately asks to
+  load in the web-images test.
+- **Holds back images from other sites.** If a file embeds images, video or
+  audio from the web, Hushmark does not load them, because the request
+  would tell that server the file was opened. That includes disguised
+  addresses Chrome would still accept, such as `https:host/x.png` or network
+  paths. (A file on a website may show images from its own site, which
+  already served the file.) A bar says how many were held back and offers
+  "Load images"; Settings can make that automatic.
 - **Spell checking is off** in the editor unless you turn it on in Settings,
   because Chrome's "enhanced" spell check sends typed text to Google.
-- **Asks for no permissions.** `manifest.json` has no `permissions`, no
-  `host_permissions`, no background worker, no options page. The only switch
-  you flip is Chrome's own "Allow access to file URLs", which Chrome requires
-  for any extension that touches local files. Saving uses the browser's
-  standard File System Access API, which asks you to confirm the file.
-- **Stores only two things, only on this computer.** Your appearance and
-  editing settings (in the browser's `localStorage` for `file://` pages) and,
-  once you have saved a file, Chrome's handle to that file (in `IndexedDB`,
-  keyed by the file's URL) so the next save does not need the file dialog
-  again. Neither is synced anywhere; "Forget file access" in Settings drops
-  the handle. One thing to know: Chrome gives every `file://` page the same
-  storage origin, so any local HTML file you open could read these values
-  (the handle is useless without Chrome's permission prompt, and the
-  settings are just colours and sizes).
-- **Ships all of its code.** Four widely used libraries are vendored
+- **Stores almost nothing, only on this computer.**
+  - Your settings, in the extension's own storage (`chrome.storage.local`):
+    changed only by your own clicks in Hushmark's Settings, never by web
+    pages or other local files, and removed when you uninstall. While
+    Hushmark shows a file from a website, that site's scripts can see the
+    display settings applied to the page, such as the theme. (Earlier
+    versions kept settings in the `localStorage` of `file://` pages; they
+    are moved over the first time you open a local file after updating,
+    without the options that lower privacy, and deleted from there.)
+  - The link to a file you save is kept in memory for that tab; only if you
+    turn on "Remember saved files" is it also kept in the
+    `IndexedDB` of `file://` pages, under the file's address. Other local
+    HTML files can read that, and uninstalling does not clear it, so it is
+    off by default. Settings → "Forget saved files" and "Reset all Hushmark
+    data", in a tab showing a local file, remove it.
+  - Nothing is ever written to a website's own storage.
+- **Ships all of its code.** Four widely used npm packages are vendored
   byte-for-byte from npm, with versions and SHA-256 hashes recorded in
   [extension/vendor/VERSIONS.md](extension/vendor/VERSIONS.md): marked
   (Markdown to HTML), DOMPurify (HTML sanitizer), Turndown and its GFM plugin
   (HTML back to Markdown). Chrome's Manifest V3 forbids remotely hosted code
   anyway; this extension has none.
 - **Is small enough to read.** Our own code lives in
-  [extension/src](extension/src): eight commented JavaScript files and three
+  [extension/src](extension/src): twelve commented JavaScript files and three
   stylesheets, no build step, no minification.
 
-One honest caveat: if a document *you open* embeds an image, audio or video
-from the web (including a video's poster or subtitle track), Chrome fetches
-it exactly as it would on any web page, and the live preview in Source mode
-re-renders as you type. The extension does not add requests, but it does not
-block the document's own either.
 
 ## Install
+
+Publishing to the Chrome Web Store is prepared in [`store/`](store/README.md). Until then, load it unpacked:
 
 1. Open `chrome://extensions` in Chrome.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and choose the [`extension`](extension) folder of
    this project.
 4. On the new card click **Details**, then turn on **Allow access to file
-   URLs**.
+   URLs** (for files on your computer; websites need no extra step).
 5. Open a Markdown file: drag it onto a tab, press `Cmd+O`, or run
 
 ```bash
 open -a "Google Chrome" README.md
 ```
+
+On a website, open any raw `.md` file. For plain text whose address has no
+Markdown extension, click Hushmark's toolbar button (pin it from the puzzle
+icon first).
 
 Because it is loaded unpacked, Chrome will not update it behind your back.
 Edit the files, then click the reload icon on the extension card to pick up
@@ -111,29 +142,44 @@ to it; drag the divider (or focus it and use the arrow keys) to resize the
 panes. Edits here are exact: nothing is reformatted.
 
 **Saving.** `Cmd+S` or the Save button writes the file through Chrome's File
-System Access API. The first time, Chrome shows its save dialog, which opens
-in your last-used folder rather than next to the file: navigate to the file
-you have open and pick it to overwrite it (Chrome does not let a page write
-to a file just because it opened it). If you pick a file with a different
-name, the text is written there as a copy, the document stays marked
-unsaved, and nothing is remembered. After a save in place the handle is
-remembered for this file, so later saves only need Chrome's one-click
-permission prompt, including after a reload; before a remembered handle is
-used again, its file is compared with what the page loaded, and a handle
-that points somewhere else is dropped. Line endings (`CRLF`) and a UTF-8
-byte-order mark are preserved. Unsaved changes show as a dot on the Save
-button and the tab title, and Chrome warns before closing the tab. If direct
-saving fails, a copy is downloaded instead and the status bar says so.
-"Autosave" in Settings saves two seconds after each change once a first
-manual save has granted access; if an autosave fails it stops until the next
-manual save.
+System Access API. Chrome does not let a page write to a file just because
+it opened it, so the first save opens Chrome's file dialog: go to the file's
+folder (the dialog opens in your last-used one) and pick the file itself,
+then allow Chrome's prompt to save changes. Hushmark checks that the picked
+file has the same name and still holds the text this tab opened, and saves
+nothing otherwise, so a same-named file elsewhere, or a file changed by
+another program, is never overwritten. (A browser page cannot see a file's
+folder, so an identical copy elsewhere would pass the check.) The file keeps
+its encoding (UTF-8 or UTF-16), byte-order mark and line endings; a file in
+an older encoding such as Windows-1252 is saved as UTF-8. Saving with no changes writes
+nothing. Unsaved changes show as a dot on the Save button and the tab title,
+and Chrome warns before closing the tab (sites that sandbox their files,
+such as raw.githubusercontent.com, suppress that warning). If writing fails, a copy is
+downloaded instead and the status bar says so. "Autosave" in Settings saves
+two seconds after each change once the file is linked; if an autosave fails
+it stops until the next manual save.
+
+**On websites** a raw `.md` file opens formatted, with the same Read, Edit
+and Source modes. Save becomes **Download**: a website's file cannot be
+written back, so it saves a copy, unless the site blocks downloads
+(raw.githubusercontent.com does), and then the status bar says so. Hushmark's
+toolbar button formats any
+plain-text tab, for example a raw file whose address has no Markdown
+extension.
 
 **Outline** opens a sidebar of headings. The sliders button opens the
-settings drawer: theme swatches (Auto, GitHub Light, GitHub Dark, Solarized
-Light, Solarized Dark, Sepia, Nord, Dracula, Gruvbox Dark, One Dark), font
-(sans-serif, serif, monospace), text size, line width (full width by default,
-or a comfortable or narrow column), autosave. The status bar shows word and
-character counts, reading time and save state. Print styles hide the chrome.
+settings drawer. Appearance has a theme menu (Auto, then the light themes
+GitHub Light, Solarized Light and Sepia, then the dark ones GitHub Dark,
+Solarized Dark, Nord, Dracula, Gruvbox Dark and One Dark); resting the
+pointer on a theme, or moving to it with the arrow keys, previews it on the
+page, and it is kept only if you pick it. Then font (sans-serif, serif,
+monospace), text size and line width (full width by default, or a
+comfortable or narrow column). Editing has autosave and spell check, Websites
+has "Format Markdown files on websites" (on by default), and Privacy has
+"Load web images automatically", "Remember saved files", "Forget saved files"
+(in a tab showing a local file) and "Reset all Hushmark data", which asks
+first. The "Buy me a coffee" link stays pinned to the bottom of the drawer. The status bar shows word and character counts,
+reading time and save state. Print styles hide the chrome.
 
 The layout is an app shell rather than a page: the bars stay put and the
 document scrolls in its own area. Below about 900 px the outline becomes a
@@ -202,7 +248,7 @@ are valid UTF-8, so what you see (and save) is the real text.
 
 ```
 extension/                what you load into Chrome
-  manifest.json           Manifest V3, no permissions
+  manifest.json           Manifest V3
   src/content.js          detects Chrome's plain-text view, fixes encoding, mounts the app
   src/render.js           Markdown -> sanitized HTML, heading anchors, front matter
   src/markdown-out.js     edited HTML -> Markdown (Turndown rules)
@@ -210,13 +256,21 @@ extension/                what you load into Chrome
   src/file-access.js      saving through the File System Access API
   src/prefs.js            theme / font / size / width / autosave preferences
   src/icons.js            inline SVG icons for the toolbar and app chrome
-  src/app.js              app shell: modes, outline, status bar, settings, save flow
+  src/app.js              app shell: modes, outline, status bar, save flow
+  src/settings.js         the Settings drawer: theme picker, toggles, data buttons, support link
+  src/background.js       service worker: the website gate and the toolbar button
+  src/web-gate.js         the only script registered for websites: loads Hushmark into plain-text .md pages only
+  src/config.js           publisher settings (the optional support link)
   src/themes.css          colour themes and typography variables
   src/content.css         document styles
   src/editor.css          app shell, toolbar, drawers, dialogs, responsive rules
   vendor/                 marked, DOMPurify, Turndown, Turndown GFM (see VERSIONS.md)
   icons/                  icon.svg and the PNG sizes Chrome wants
 scripts/vendor.mjs        copies the libraries from node_modules and records hashes
+scripts/package.mjs       builds and checks the Chrome Web Store zip (npm run package)
+scripts/store-assets.mjs  renders the store screenshots, promo tile and icon (npm run store:assets)
+scripts/privacy-page.mjs  turns store/privacy-policy.md into a standalone page (npm run store:policy)
+store/                    everything for the Chrome Web Store submission; start at store/README.md
 test/e2e.mjs              Playwright test against the fixtures in test/fixtures
 ```
 
@@ -240,7 +294,7 @@ The tests load the unpacked extension into a throwaway Chromium profile, open
 the fixtures from disk (including an XSS fixture of script, handler and URL
 payloads), and check rendering, themes, every editing feature including
 paste, Markdown round-trip fidelity for every fixture, saving (through a
-stand-in for Chrome's save dialog injected into the extension's own script
+stand-in for Chrome's open dialog injected into the extension's own script
 context, including the permission prompt and a wrong file name), the phone
 and tablet layouts, sanitizing, and that no page in the run makes a network
 request:

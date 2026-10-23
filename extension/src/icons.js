@@ -38,8 +38,21 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     minus: '<path d="M5 12h14"/>',
     trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>',
-    check: '<path d="M5 12l4 4L19 7"/>'
+    check: '<path d="M5 12l4 4L19 7"/>',
+    chevron: '<path d="M6 9l6 6 6-6"/>',
+    palette: '<path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.2-9-7.2z"/><circle cx="7.5" cy="11.5" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15" cy="8" r="1.2" fill="currentColor"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/>',
+    shield: '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10c-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>'
   };
+
+  // Buy Me a Coffee's cup, drawn here in its brand colours so nothing is
+  // fetched from their servers.
+  var COFFEE = '<svg class="mdv-coffee" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<path d="M6.2 7.5h11.6l-1.4 12.1a1.6 1.6 0 0 1-1.6 1.4H9.2a1.6 1.6 0 0 1-1.6-1.4z" fill="#FFFFFF" stroke="#0D0C22" stroke-width="1.3" stroke-linejoin="round"/>' +
+    '<path d="M7.25 11h9.5l-.95 8.4a1 1 0 0 1-1 .95H9.2a1 1 0 0 1-1-.95z" fill="#FFDD00"/>' +
+    '<rect x="5" y="4.6" width="14" height="2.9" rx="1.2" fill="#FFFFFF" stroke="#0D0C22" stroke-width="1.3"/>' +
+    '<path d="M8.4 3.2h7.2" stroke="#0D0C22" stroke-width="1.3" stroke-linecap="round"/>' +
+    '</svg>';
 
   function icon(name) {
     var holder = global.document.createElement('span');
@@ -48,4 +61,9 @@
   }
 
   api.icon = icon;
+  api.coffeeIcon = function () {
+    var holder = global.document.createElement('span');
+    holder.innerHTML = COFFEE;
+    return holder.firstChild;
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

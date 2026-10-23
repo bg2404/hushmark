@@ -12,7 +12,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const extensionPath = realpathSync(resolve(here, '..', 'extension'));
+// HUSHMARK_EXTENSION_DIR lets the suite run against an unpacked store zip.
+const extensionPath = realpathSync(process.env.HUSHMARK_EXTENSION_DIR ? resolve(process.env.HUSHMARK_EXTENSION_DIR) : resolve(here, '..', 'extension'));
 const EXTENSION_NAME = JSON.parse(readFileSync(join(extensionPath, 'manifest.json'), 'utf8')).name;
 const fixtures = resolve(here, 'fixtures');
 const outDir = resolve(here, 'output');
@@ -66,7 +67,7 @@ async function openFixture(context, name, hash = '') {
   const page = await context.newPage();
   const remote = [];
   const errors = [];
-  page.on('request', (r) => { if (/^https?:/i.test(r.url())) remote.push(r.url()); });
+  page.on('request', (r) => { if (/^(?:https?:|file:\/\/(?!\/|localhost\/))/i.test(r.url())) remote.push(r.url()); });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(fileUrl(name, hash));
@@ -99,30 +100,60 @@ async function isolatedWorld(page) {
   };
 }
 
-// A fake showSaveFilePicker whose "file" records what was written on the
-// <html> element, where the test (in the main world) can read it.
+// A stand-in for Chrome's file pickers, run inside the extension's own script
+// context. window.__disk is the one file on "disk": its name and its bytes.
+// showOpenFilePicker returns a handle to it without emptying it (as Chrome's
+// open dialog does); permission is tracked per handle; writes replace the
+// bytes and mirror the decoded text onto <html data-test-saved>.
 const SAVE_STUB = `
   window.__picks = 0;
   window.__perm = [];
-  window.showSaveFilePicker = async (opts) => {
-    window.__picks += 1;
-    let buf = '';
+  window.__disk = window.__disk || { name: 'untitled.md', bytes: new Uint8Array(0) };
+  const decode = (bytes) => {
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
+    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+    return new TextDecoder('utf-8').decode(bytes);
+  };
+  const makeHandle = () => {
+    let granted = false;
     return {
       kind: 'file',
-      name: window.__pickName || (opts && opts.suggestedName) || 'untitled.md',
-      queryPermission: async () => { window.__perm.push('query'); return window.__perm.includes('request') ? 'granted' : 'prompt'; },
-      requestPermission: async () => { window.__perm.push('request'); return 'granted'; },
-      getFile: async () => ({ text: async () => buf, arrayBuffer: async () => new TextEncoder().encode(buf).buffer }),
+      name: window.__pickName || window.__disk.name,
+      queryPermission: async () => { window.__perm.push('query'); return granted ? 'granted' : 'prompt'; },
+      requestPermission: async () => {
+        window.__perm.push('request');
+        if (window.__gestureOnce) { window.__gestureOnce = false; throw new DOMException('User activation is required', 'SecurityError'); }
+        granted = true;
+        return 'granted';
+      },
+      getFile: async () => {
+        const bytes = window.__disk.bytes.slice();
+        return { text: async () => decode(bytes), arrayBuffer: async () => bytes.buffer };
+      },
       createWritable: async () => {
-        let next = '';
+        const parts = [];
         return {
-          write: async (chunk) => { next += typeof chunk === 'string' ? chunk : ''; },
-          close: async () => { buf = next; document.documentElement.setAttribute('data-test-saved', buf); },
+          write: async (chunk) => { parts.push(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk.buffer || chunk)); },
+          abort: async () => {},
+          close: async () => {
+            const size = parts.reduce((n, p) => n + p.length, 0);
+            const out = new Uint8Array(size);
+            let o = 0;
+            for (const p of parts) { out.set(p, o); o += p.length; }
+            window.__disk.bytes = out;
+            document.documentElement.setAttribute('data-test-saved', decode(out).replace(/^\\uFEFF/, ''));
+          },
         };
       },
     };
   };
+  window.showOpenFilePicker = async () => { window.__picks += 1; return [makeHandle()]; };
+  window.showSaveFilePicker = async () => { throw new Error('the save dialog should not be used'); };
   true`;
+
+// Puts `text` (or raw bytes given as an array) on the stand-in disk.
+const diskWith = (name, text) => `window.__disk = { name: ${JSON.stringify(name)}, bytes: new TextEncoder().encode(${JSON.stringify(text)}) }; true`;
+const diskWithBytes = (name, bytes) => `window.__disk = { name: ${JSON.stringify(name)}, bytes: new Uint8Array(${JSON.stringify(Array.from(bytes))}) }; true`;
 
 async function setSelection(page, selector, where) {
   await page.evaluate(([sel, w]) => {
@@ -152,6 +183,7 @@ const xssAudit = (page) => page.evaluate(() => {
     for (const a of el.attributes) {
       if (/^on/i.test(a.name)) bad.push(tag + '@' + a.name);
       if (a.name === 'style') bad.push(tag + '@style');
+      if (a.name === 'spellcheck') bad.push(tag + '@spellcheck');
       if (['href', 'src', 'srcset', 'data', 'action', 'formaction', 'xlink:href', 'poster', 'background', 'ping'].includes(a.name) && /^\s*(javascript|vbscript|data):/i.test(a.value) && !(tag === 'img' && a.name === 'src' && /^\s*data:image\//i.test(a.value))) bad.push(tag + '@' + a.name + '=' + a.value.slice(0, 40));
     }
     if (tag === 'input' && !(el.type === 'checkbox' && (el.disabled || main.isContentEditable))) bad.push('live input');
@@ -167,8 +199,24 @@ const xssAudit = (page) => page.evaluate(() => {
 const headless = !process.env.HEADED;
 const context = await launch({ headless });
 const allRemote = [];
-context.on('request', (r) => { if (/^https?:/i.test(r.url())) allRemote.push(r.url()); });
+// md.test is the stand-in website served by context.route below; remote.invalid
+// is what the web-images tests deliberately ask to load.
+context.on('request', (r) => { if (/^(?:https?:|file:\/\/(?!\/|localhost\/))/i.test(r.url()) && !/remote\.invalid|\/\/md\.test\//.test(r.url())) allRemote.push(r.url()); });
+
+// Hushmark keeps its settings in chrome.storage.local; the tests reach it
+// through the extension's service worker.
+const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+const setPrefs = (prefs) => sw.evaluate((p) => chrome.storage.local.set({ prefs: p }), prefs);
+const clearPrefs = () => sw.evaluate(() => chrome.storage.local.remove('prefs'));
+const getPrefs = () => sw.evaluate(async () => (await chrome.storage.local.get('prefs')).prefs || null);
+const webScriptRegistered = () => sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ['hushmark-web'] })).length === 1);
+async function waitFor(fn, ms = 3000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 50)); }
+  return false;
+}
 console.log(`chromium: ${findChromium()}  headless=${headless}`);
+console.log(`extension: ${extensionPath}`);
 
 try {
   // ---------------------------------------------------------------- basic
@@ -262,20 +310,116 @@ try {
     const { page, errors } = await openFixture(context, 'basic.md');
     await page.click('.mdv-settings-toggle');
     check('themes: settings panel opens', await page.evaluate(() => document.querySelector('dialog.mdv-settings').open));
-    check('themes: all themes listed as swatches', await page.evaluate(() => document.querySelectorAll('.mdv-settings .mdv-theme-swatch').length) === 10);
-    await page.click('.mdv-settings .mdv-theme-swatch[data-theme="nord"]');
+    check('settings: focus starts on the theme picker', await page.evaluate(() => document.activeElement === document.querySelector('.mdv-picker-button')));
+    await page.click('.mdv-picker-button');
+    check('themes: the picker lists all ten themes', await page.evaluate(() => !document.querySelector('.mdv-picker-list').hidden && document.querySelectorAll('.mdv-picker-option').length === 10));
+    check('themes: Auto, then the light themes, then the dark ones', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.mdv-picker-option')].map((o) => o.dataset.value))) === JSON.stringify(['auto', 'github-light', 'solarized-light', 'sepia', 'github-dark', 'solarized-dark', 'nord', 'dracula', 'gruvbox-dark', 'one-dark']) &&
+      JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.mdv-picker-group')].map((g) => g.getAttribute('role') + ':' + document.getElementById(g.getAttribute('aria-labelledby')).textContent))) === JSON.stringify(['group:Light', 'group:Dark']));
+    check('themes: the theme button is named "Theme" with its value', (await page.getByRole('button', { name: 'Theme Auto (system)', exact: true }).count()) === 1);
+    check('themes: the hover hint is not read as the button\'s description', (await page.getAttribute('.mdv-picker-button', 'aria-describedby')) === null);
+    check('settings: each switch is named by its label alone', (await page.getByRole('switch', { name: 'Autosave', exact: true }).count()) === 1 && (await page.getByRole('switch', { name: 'Spell check', exact: true }).count()) === 1);
+
+    // hovering previews a theme without saving it, once the pointer rests
+    await page.hover('.mdv-picker-option[data-value="dracula"]');
+    await page.waitForFunction(() => document.documentElement.getAttribute('data-mdv-theme') === 'dracula', null, { timeout: 2000 }).catch(() => {});
+    check('themes: hovering a theme previews it', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'dracula' && (await bg(page)) === 'rgb(40, 42, 54)', await bg(page));
+    check('themes: ... without saving it', ((await getPrefs()) || {}).theme === undefined || ((await getPrefs()) || {}).theme === 'auto', JSON.stringify(await getPrefs()));
+    await page.mouse.move(100, 400); // off the list
+    check('themes: moving off the list goes back to the saved theme', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'auto');
+    check('themes: ... and highlights the saved theme again', await page.evaluate(() => document.querySelector('.mdv-picker-option.mdv-active').dataset.value) === 'auto');
+
+    // sweeping the pointer across the list does not flash every theme
+    {
+      const box = async (v) => page.locator(`.mdv-picker-option[data-value="${v}"]`).boundingBox();
+      const top = await box('auto');
+      const bottom = await box('one-dark');
+      await page.mouse.move(top.x + 40, top.y + top.height / 2);
+      await page.evaluate(() => {
+        window.__themeChanges = 0;
+        new MutationObserver((list) => { window.__themeChanges += list.length; }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-mdv-theme'] });
+      });
+      await page.mouse.move(bottom.x + 40, bottom.y + bottom.height / 2, { steps: 12 });
+      await page.mouse.move(top.x + 40, top.y + top.height / 2, { steps: 12 });
+      const during = await page.evaluate(() => window.__themeChanges);
+      await page.mouse.move(100, 400);
+      check('themes: a quick sweep over the list previews almost nothing', during <= 2, `${during} theme changes`);
+    }
+
+    // keyboard: arrows preview, Escape cancels (and closes only the list)
+    await page.focus('.mdv-picker-list');
+    await page.keyboard.press('ArrowDown');
+    check('themes: arrow keys preview the next theme at once', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'github-light');
+    await page.keyboard.press('Escape');
+    check('themes: Escape cancels the preview and closes the list', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme') === 'auto' && document.querySelector('.mdv-picker-list').hidden && document.querySelector('dialog.mdv-settings').open));
+
+    // picking saves it
+    await page.click('.mdv-picker-button');
+    await page.click('.mdv-picker-option[data-value="nord"]');
     check('themes: nord applied', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'nord' && (await bg(page)) === 'rgb(46, 52, 64)', await bg(page));
-    check('themes: swatch shows selection', await page.getAttribute('.mdv-theme-swatch[data-theme="nord"]', 'aria-pressed') === 'true');
-    await page.selectOption('.mdv-settings select[aria-label="Font"]', 'serif');
+    check('themes: the picker shows the saved theme', (await page.textContent('.mdv-picker-name')) === 'Nord' && (await page.getAttribute('.mdv-picker-option[data-value="nord"]', 'aria-selected')) === 'true' && ((await getPrefs()) || {}).theme === 'nord');
+    await page.click('.mdv-picker-button');
+    await page.focus('.mdv-picker-list');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    check('themes: Enter picks the highlighted theme', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'dracula' && ((await getPrefs()) || {}).theme === 'dracula');
+    await page.click('.mdv-picker-button');
+    await page.click('.mdv-picker-option[data-value="nord"]');
+    {
+      // the list opening under a pointer that has not moved is not hover
+      await page.click('.mdv-picker-button');
+      const sepia = await page.locator('.mdv-picker-option[data-value="sepia"]').boundingBox();
+      await page.keyboard.press('Escape');
+      await page.mouse.move(sepia.x + 60, sepia.y + sepia.height / 2);
+      await page.focus('.mdv-picker-button');
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(400);
+      const still = await page.evaluate(() => ({ active: document.querySelector('.mdv-picker-option.mdv-active').dataset.value, shown: document.documentElement.getAttribute('data-mdv-theme') }));
+      check('themes: a list opening under a still pointer highlights and previews nothing', still.active === 'nord' && still.shown === 'nord', JSON.stringify(still));
+      await page.keyboard.press('Escape');
+      await page.mouse.move(100, 400);
+    }
+
+    // the support footer is always in view
+    const foot = await page.evaluate(() => {
+      const d = document.querySelector('dialog.mdv-settings').getBoundingClientRect();
+      const f = document.querySelector('.mdv-set-foot');
+      if (!f) return null;
+      const r = f.getBoundingClientRect();
+      return { atBottom: Math.abs(r.bottom - d.bottom) <= 2, cup: !!f.querySelector('svg.mdv-coffee'), text: f.textContent };
+    });
+    const supportConfigured = /supportUrl:\s*'https:/.test(readFileSync(join(extensionPath, 'src', 'config.js'), 'utf8'));
+    check(supportConfigured ? 'support: the support footer is pinned to the bottom with the coffee cup' : 'support: no footer without a support link',
+      supportConfigured ? !!foot && foot.atBottom && foot.cup && /Buy me a coffee/.test(foot.text) : foot === null, JSON.stringify(foot));
+    await page.evaluate(() => { document.querySelector('.mdv-set-body').scrollTop = 99999; });
+    check('support: ... and stays in view when the settings scroll', supportConfigured ? await page.evaluate(() => { const f = document.querySelector('.mdv-set-foot').getBoundingClientRect(); return f.top >= 0 && f.bottom <= window.innerHeight; }) : true);
+    await page.evaluate(() => { document.querySelector('.mdv-set-body').scrollTop = 0; });
+
+    await page.click('.mdv-segmented[data-pref="font"] [data-value="serif"]');
+    check('settings: the font control shows the choice', await page.getAttribute('.mdv-segmented[data-pref="font"] [data-value="serif"]', 'aria-checked') === 'true');
     check('themes: serif font applied', /Palatino|Georgia/.test(await page.evaluate(() => getComputedStyle(document.body).fontFamily)));
     await page.click('.mdv-settings button[title="Larger text"]');
     await page.click('.mdv-settings button[title="Larger text"]');
+    {
+      // at the largest size the button keeps focus (it is not disabled)
+      await page.focus('.mdv-settings button[title="Larger text"]');
+      for (let i = 0; i < 8; i++) await page.keyboard.press('Enter');
+      const atMax = await page.evaluate(() => { const b = document.querySelector('.mdv-settings button[title="Larger text"]'); return { size: document.querySelector('.mdv-step-value').textContent, disabled: b.getAttribute('aria-disabled'), focused: document.activeElement === b }; });
+      check('settings: the text-size button keeps focus at the largest size', atMax.size === '24 px' && atMax.disabled === 'true' && atMax.focused, JSON.stringify(atMax));
+      for (let i = 0; i < 6; i++) await page.click('.mdv-settings button[title="Smaller text"]');
+    }
     check('themes: text size 18px reaches the document', await page.evaluate(() => getComputedStyle(document.querySelector('.mdv-content p')).fontSize) === '18px', await page.evaluate(() => getComputedStyle(document.querySelector('.mdv-content p')).fontSize));
     check('themes: full width by default', await page.evaluate(() => getComputedStyle(document.querySelector('.mdv-doc')).maxWidth) === 'none');
-    await page.selectOption('.mdv-settings select[aria-label="Width"]', 'comfortable');
+    await page.click('.mdv-segmented[data-pref="width"] [data-value="comfortable"]');
     check('themes: comfortable width caps the column', await page.evaluate(() => getComputedStyle(document.querySelector('.mdv-doc')).maxWidth) === '1088px', await page.evaluate(() => getComputedStyle(document.querySelector('.mdv-doc')).maxWidth));
     await page.screenshot({ path: join(outDir, 'theme-nord.png'), fullPage: false });
     await page.keyboard.press('Escape');
+    {
+      const configured = (readFileSync(join(extensionPath, 'src', 'config.js'), 'utf8').match(/supportUrl:\s*'([^']*)'/) || [])[1] || '';
+      const link = await page.evaluate(() => { const a = document.querySelector('.mdv-settings a.mdv-support-link'); return a ? { href: a.getAttribute('href'), target: a.target, rel: a.rel } : null; });
+      check(configured ? 'support: Settings links to the configured support page, safely' : 'support: no support link while none is configured',
+        configured ? !!link && link.href === configured && link.target === '_blank' && /noopener/.test(link.rel) && /noreferrer/.test(link.rel) : link === null,
+        JSON.stringify(link));
+    }
     check('themes: Escape closes settings', await page.evaluate(() => !document.querySelector('dialog.mdv-settings').open));
     check('themes: focus returns to the settings button', await page.evaluate(() => document.activeElement === document.querySelector('.mdv-settings-toggle')));
 
@@ -286,7 +430,7 @@ try {
     // every theme renders with a distinct background and no errors
     const seen = new Set();
     for (const id of ['github-light', 'github-dark', 'solarized-light', 'solarized-dark', 'sepia', 'nord', 'dracula', 'gruvbox-dark', 'one-dark']) {
-      await page.evaluate((t) => { localStorage.setItem('local-markdown-viewer:prefs', JSON.stringify({ theme: t })); }, id);
+      await setPrefs({ theme: id });
       await page.reload();
       await page.waitForTimeout(150);
       seen.add(await bg(page));
@@ -295,7 +439,7 @@ try {
     check('themes: nine explicit themes have distinct backgrounds', seen.size === 9, [...seen].join(' | '));
 
     // outline
-    await page.evaluate(() => localStorage.setItem('local-markdown-viewer:prefs', JSON.stringify({})));
+    await clearPrefs();
     await page.reload();
     await page.waitForTimeout(200);
     await page.click('.mdv-toc-toggle');
@@ -518,11 +662,12 @@ try {
     }));
 
     // save through the (stubbed) File System Access API
+    await world.eval(diskWith('basic.md', readFileSync(join(fixtures, 'basic.md'), 'utf8')));
     await world.eval(SAVE_STUB);
     await page.click('.mdv-save');
     await page.waitForFunction(() => document.documentElement.hasAttribute('data-test-saved'), null, { timeout: 5000 }).catch(() => {});
     const saved = await page.evaluate(() => document.documentElement.getAttribute('data-test-saved'));
-    check('save: text written through showSaveFilePicker', typeof saved === 'string' && saved === md, (await page.textContent('.mdv-save-state')));
+    check('save: first save links the file through the open dialog and writes it', typeof saved === 'string' && saved === md, (await page.textContent('.mdv-save-state')));
     check('save: status says saved', /^Saved \d/.test(await page.textContent('.mdv-save-state')), await page.textContent('.mdv-save-state'));
     check('save: no longer dirty', await page.evaluate(() => !document.querySelector('.mdv-save').classList.contains('mdv-dirty') && !document.title.startsWith('●')));
 
@@ -535,23 +680,464 @@ try {
     await page.keyboard.press('Meta+s');
     await page.waitForFunction(() => (document.documentElement.getAttribute('data-test-saved') || '').includes('Appended line.'), null, { timeout: 5000 }).catch(() => {});
     check('save: Cmd+S saves from Source mode', (await page.evaluate(() => document.documentElement.getAttribute('data-test-saved'))).endsWith('Appended line.\n'));
-    check('save: the file was picked once and reused with a permission prompt', (await world.eval('JSON.stringify({ picks: window.__picks, perm: window.__perm })')) === JSON.stringify({ picks: 1, perm: ['query', 'request'] }), await world.eval('JSON.stringify({ picks: window.__picks, perm: window.__perm })'));
+    check('save: the file was picked once, then reused after one permission prompt', (await world.eval('JSON.stringify({ picks: window.__picks, perm: window.__perm })')) === JSON.stringify({ picks: 1, perm: ['query', 'request', 'query'] }), await world.eval('JSON.stringify({ picks: window.__picks, perm: window.__perm })'));
+    check('save: with "Remember saved files" off, no file address is stored', (await world.eval(`new Promise((done) => { const r = indexedDB.open('local-markdown-viewer', 1); r.onupgradeneeded = () => r.result.createObjectStore('file-handles'); r.onsuccess = () => { const q = r.result.transaction('file-handles').objectStore('file-handles').count(); q.onsuccess = () => { r.result.close(); done(q.result); }; }; })`)) === 0);
 
-    // picking a different file name must not silently redirect the document
+    const status = () => page.textContent('.mdv-save-state');
+    const dirty = () => page.evaluate(() => document.querySelector('.mdv-save').classList.contains('mdv-dirty'));
+
+    // nothing changed: nothing written
+    const writesBefore = await world.eval('window.__disk.bytes.length');
+    await page.keyboard.press('Meta+s');
+    await page.waitForTimeout(150);
+    check('save: Cmd+S with no changes writes nothing', (await status()) === 'No changes to save' && (await world.eval('window.__disk.bytes.length')) === writesBefore, await status());
+
+    // the file changed on disk behind the tab's back: refuse to overwrite it
+    const lastSaved = await page.evaluate(() => document.documentElement.getAttribute('data-test-saved'));
+    await world.eval(`window.__disk.bytes = new TextEncoder().encode('Edited in another program.\\n'); true`);
+    await page.focus('.mdv-source');
+    await page.keyboard.type('Conflict?');
+    await page.keyboard.press('Meta+s');
+    await page.waitForFunction(() => /changed on disk/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
+    check('save: a file changed on disk is not overwritten', /changed on disk/.test(await status()) && (await dirty()) && (await world.eval('new TextDecoder().decode(window.__disk.bytes)')) === 'Edited in another program.\n', await status());
+    await world.eval(`window.__disk.bytes = new TextEncoder().encode(${JSON.stringify('')} + document.documentElement.getAttribute('data-test-saved')); true`);
+
+    // picking a different file must not redirect the document
     await page.click('.mdv-settings-toggle');
-    await page.click('.mdv-settings button:has-text("Forget file access")');
+    await page.click('.mdv-settings button:has-text("Forget saved files")');
+    await page.waitForFunction(() => /forgotten/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
     await page.keyboard.press('Escape');
     await world.eval('window.__pickName = "elsewhere.md"; true');
     await page.focus('.mdv-source');
-    await page.keyboard.type('More.');
     await page.keyboard.press('Meta+s');
-    await page.waitForFunction(() => /elsewhere\.md/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
-    check('save: a copy saved under another name leaves the document unsaved', await page.evaluate(() => /Saved a copy as elsewhere\.md/.test(document.querySelector('.mdv-save-state').textContent) && document.querySelector('.mdv-save').classList.contains('mdv-dirty')), await page.textContent('.mdv-save-state'));
+    await page.waitForFunction(() => /not the file this tab opened/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
+    check('save: choosing a different file saves nothing and leaves the document unsaved', /not the file this tab opened/.test(await status()) && (await dirty()) && (await page.evaluate(() => document.documentElement.getAttribute('data-test-saved'))) === lastSaved, await status());
     await world.eval('window.__pickName = ""; true');
+
+    // Chrome sometimes needs a second key press before it can show its prompt
+    await world.eval('window.__gestureOnce = true; true');
+    await page.focus('.mdv-source');
+    await page.keyboard.press('Meta+s');
+    await page.waitForFunction(() => /Press .*S again/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
+    check('save: if Chrome needs another key press, the status says so', /is linked\. Press .*S again/.test(await status()) && (await dirty()), await status());
+    await page.keyboard.press('Meta+s');
+    await page.waitForFunction(() => /^Saved \d/.test(document.querySelector('.mdv-save-state').textContent), null, { timeout: 5000 }).catch(() => {});
+    check('save: the second key press saves', /^Saved \d/.test(await status()) && !(await dirty()) && (await page.evaluate(() => document.documentElement.getAttribute('data-test-saved'))).includes('Conflict?'), await status());
     check('edit: no http(s) requests during editing', remote.length === 0, remote.join(', '));
     check('edit: no console/page errors', realErrors(errors).length === 0, realErrors(errors).join(' | '));
     await page.screenshot({ path: join(outDir, 'editing.png'), fullPage: true });
     await world.detach();
+    await page.close();
+  }
+
+  // ------------------------------------------- settings storage, migration
+  {
+    // settings from an earlier version, in the localStorage of file:// pages
+    const plant = (p) => page.evaluate((v) => localStorage.setItem('local-markdown-viewer:prefs', JSON.stringify(v)), p);
+    await clearPrefs();
+    const { page } = await openFixture(context, 'basic.md');
+    check('migration: a new install never imports old settings', (await sw.evaluate(async () => (await chrome.storage.local.get('legacyChecked')).legacyChecked)) === true);
+    await plant({ theme: 'dracula' });
+    await page.reload();
+    await page.waitForTimeout(300);
+    check('migration: ... so a local page cannot plant settings through the old key', (await getPrefs()) === null && await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'auto', JSON.stringify(await getPrefs()));
+    // as after an update from 2.0
+    await sw.evaluate(() => chrome.storage.local.remove('legacyChecked'));
+    await plant({ theme: 'sepia', size: 19, autosave: true, remoteImages: true, rememberFiles: true, spellcheck: true });
+    await page.reload();
+    await page.waitForTimeout(300);
+    check('migration: old settings are moved into extension storage', await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'sepia' && ((await getPrefs()) || {}).size === 19, JSON.stringify(await getPrefs()));
+    check('migration: ... except options that lower privacy', ((await getPrefs()) || {}).remoteImages === false && ((await getPrefs()) || {}).rememberFiles === false && ((await getPrefs()) || {}).spellcheck === false && ((await getPrefs()) || {}).autosave === true, JSON.stringify(await getPrefs()));
+    check('migration: ... and removed from the page storage other local files can read', await page.evaluate(() => localStorage.getItem('local-markdown-viewer:prefs')) === null);
+    await clearPrefs();
+    await plant({ theme: 'nord' });
+    await page.reload();
+    await page.waitForTimeout(300);
+    check('migration: ... only once', (await getPrefs()) === null, JSON.stringify(await getPrefs()));
+    await page.evaluate(() => localStorage.clear());
+    await page.click('.mdv-toc-toggle');
+    check('settings: changing a setting writes nothing to page storage', await page.evaluate(() => localStorage.length) === 0, await page.evaluate(() => JSON.stringify(Object.keys(localStorage))));
+    await clearPrefs();
+    await page.close();
+  }
+
+  // ------------------------------------------------------------- websites
+  {
+    const logo = readFileSync(join(fixtures, 'assets', 'logo.png'));
+    await context.route('https://md.test/**', (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/docs/readme.md' || path === '/docs/readme.md?raw=1') {
+        return route.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8', body: '# Web readme\n\nSame site: ![logo](./logo.png)\n\nOther site: ![tracker](https://remote.invalid/pixel.png)\n\n- [ ] a task\n' });
+      }
+      if (path === '/docs/logo.png') return route.fulfill({ status: 200, contentType: 'image/png', body: logo });
+      if (path === '/notes/plain') return route.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8', body: '# No extension\n\nRendered only by the toolbar button.\n' });
+      // raw.githubusercontent.com serves raw files with this policy
+      if (path === '/sandboxed-dl/readme.md') return route.fulfill({ status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox allow-downloads" }, body: '# Sandboxed\n\nDownloads allowed.\n' });
+      // XML can run its own scripts, so it is never treated as plain text
+      if (path === '/docs/feed.md') return route.fulfill({ status: 200, contentType: 'text/xml', body: '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head><body><PRE># Notes</PRE></body></html>' });
+      if (path === '/sandboxed/readme.md') return route.fulfill({ status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" }, body: '# Sandboxed\n\nA raw file.\n' });
+      if (path === '/page.html' || path === '/docs/page.md') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>x</title><p>HTML page</p>' });
+      return route.fulfill({ status: 404, body: '' });
+    });
+    await clearPrefs();
+    check('web: the website script is registered by default', await waitFor(webScriptRegistered));
+
+    const page = await context.newPage();
+    const hits = [];
+    page.on('request', (r) => { if (/remote\.invalid/.test(r.url())) hits.push(r.url()); });
+    await page.goto('https://md.test/docs/readme.md');
+    await page.waitForFunction(() => document.documentElement.getAttribute('data-mdv') === 'rendered', null, { timeout: 5000 }).catch(() => {});
+    check('web: a .md file on a website is formatted automatically', await page.evaluate(() => document.documentElement.getAttribute('data-mdv')) === 'rendered' && (await page.textContent('.mdv-content h1')).includes('Web readme'));
+    await page.waitForTimeout(300);
+    check('web: images from the same site load', await page.evaluate(() => { const i = document.querySelector('.mdv-content img[alt="logo"]'); return !!i && i.complete && i.naturalWidth === 48; }));
+    check('web: images from other sites are held back', hits.length === 0 && /did not load 1 image from other sites/.test(await page.textContent('.mdv-notice')), hits.join(', '));
+    check('web: Save becomes Download', /Download/.test(await page.textContent('.mdv-save')));
+    const webDl = page.waitForEvent('download', { timeout: 2000 }).then((d) => d.suggestedFilename(), () => null);
+    await page.keyboard.press('Meta+s');
+    await page.waitForTimeout(200);
+    check('web: Cmd+S downloads a copy', (await webDl) === 'readme.md' && /Downloaded a copy of readme\.md/.test(await page.textContent('.mdv-save-state')), await page.textContent('.mdv-save-state'));
+
+    // a site that sandboxes its raw files blocks downloads without telling the page
+    {
+      const sand = await context.newPage();
+      await sand.goto('https://md.test/sandboxed/readme.md');
+      await sand.waitForFunction(() => document.documentElement.getAttribute('data-mdv') === 'rendered', null, { timeout: 5000 }).catch(() => {});
+      check('web: a sandboxed raw file is still formatted', (await sand.textContent('.mdv-content h1').catch(() => '')).includes('Sandboxed'));
+      const sandDl = sand.waitForEvent('download', { timeout: 1500 }).then(() => true, () => false);
+      await sand.click('.mdv-save');
+      check('web: on a sandboxed site, Download says the site blocks downloads', !(await sandDl) && /blocks downloads/.test(await sand.textContent('.mdv-save-state')), await sand.textContent('.mdv-save-state'));
+      await sand.click('.mdv-settings-toggle');
+      if (await sand.$('.mdv-support-link')) {
+        const stubbed = await sw.evaluate(() => {
+          self.__opened = [];
+          self.__realCreate = chrome.tabs.create;
+          chrome.tabs.create = (o) => { self.__opened.push(o.url); return Promise.resolve({}); };
+          return chrome.tabs.create !== self.__realCreate;
+        });
+        await sand.evaluate(() => document.querySelector('.mdv-support-link').click()); // a script: ignored
+        await sand.click('.mdv-support-link');
+        await sand.waitForTimeout(300);
+        const opened = await sw.evaluate(() => { const o = self.__opened; chrome.tabs.create = self.__realCreate; return o; });
+        const configured = (readFileSync(join(extensionPath, 'src', 'config.js'), 'utf8').match(/supportUrl:\s*'([^']*)'/) || [])[1];
+        check('web: on a sandboxed site, the support link is opened by Hushmark', stubbed && opened.length === 1 && opened[0] === configured, JSON.stringify({ stubbed, opened }));
+      }
+      await sand.click('.mdv-settings button:has-text("Reset all Hushmark data")');
+      check('web: on a sandboxed site, Reset still asks (in place)', await sand.evaluate(() => !document.querySelector('.mdv-set-confirm').hidden));
+      await sand.click('.mdv-settings button:has-text("Cancel")');
+      await sand.close();
+
+      // ... unless its sandbox allows downloads; the page cannot tell which
+      const dl = await context.newPage();
+      await dl.goto('https://md.test/sandboxed-dl/readme.md');
+      await dl.waitForFunction(() => document.documentElement.getAttribute('data-mdv') === 'rendered', null, { timeout: 5000 }).catch(() => {});
+      const got = dl.waitForEvent('download', { timeout: 2000 }).then(() => true, () => false);
+      await dl.click('.mdv-save');
+      const said = await dl.textContent('.mdv-save-state');
+      check('web: a sandbox that allows downloads still downloads, and the status does not deny it', (await got) && !/no copy was saved/.test(said), said);
+      await dl.close();
+    }
+    await page.click('.mdv-toc-toggle');
+    await page.waitForTimeout(150);
+    {
+      // a script on the page cannot change settings: only real input can
+      const before = JSON.stringify(await getPrefs());
+      await page.evaluate(() => {
+        const q = (sel) => document.querySelector(sel);
+        const key = (el, k) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+        // in place
+        q('input[data-pref="remoteImages"]').click();
+        const r = q('input[data-pref="rememberFiles"]');
+        r.checked = true;
+        r.dispatchEvent(new Event('change', { bubbles: true }));
+        q('.mdv-picker-button').click();
+        q('.mdv-picker-list').hidden = false;
+        q('.mdv-picker-option[data-value="dracula"]').click();
+        key(q('.mdv-picker-list'), 'End');
+        key(q('.mdv-picker-list'), 'Enter');
+        q('.mdv-segmented[data-pref="font"] [data-value="mono"]').click();
+        key(q('.mdv-segmented[data-pref="width"]'), 'End');
+        q('.mdv-settings button[title="Larger text"]').click();
+        q('.mdv-settings button.mdv-danger').click();
+        // moved out of the drawer, past its own guard
+        for (const sel of ['input[data-pref="spellcheck"]', '.mdv-picker-option[data-value="nord"]', '.mdv-settings button[title="Smaller text"]']) {
+          const el = q(sel);
+          document.body.appendChild(el);
+          el.click();
+        }
+        // stopped before the drawer sees it
+        window.addEventListener('click', (e) => { if (!e.isTrusted) e.stopImmediatePropagation(); }, true);
+        q('input[data-pref="autosave"]').click();
+        // the outline and the source/preview divider
+        q('.mdv-toc-toggle').click();
+        if (q('.mdv-divider')) key(q('.mdv-divider'), 'ArrowLeft');
+      });
+      await page.waitForTimeout(200);
+      check('web: scripts on the page cannot change settings', JSON.stringify(await getPrefs()) === before && await page.evaluate(() => !['dracula', 'nord', 'one-dark'].includes(document.documentElement.getAttribute('data-mdv-theme')) && document.querySelector('.mdv-set-confirm').hidden), JSON.stringify(await getPrefs()));
+      await page.reload();
+      await page.waitForFunction(() => document.documentElement.getAttribute('data-mdv') === 'rendered', null, { timeout: 5000 }).catch(() => {});
+      check('web: Settings on a website has no Forget button, and says why', await page.evaluate(() => ![...document.querySelectorAll('.mdv-settings button')].some((b) => /Forget saved files/.test(b.textContent)) && /open one to forget them/.test(document.querySelector('.mdv-settings').textContent)));
+    }
+    check('web: nothing is written to the website\'s storage', await page.evaluate(async () => localStorage.length === 0 && sessionStorage.length === 0 && (await indexedDB.databases()).length === 0));
+
+    // an HTML page whose address happens to end in .md must be left alone,
+    // and must not be able to tell that Hushmark is installed
+    const html = await context.newPage();
+    await html.goto('https://md.test/docs/page.md');
+    await html.waitForTimeout(300);
+    check('web: an HTML page at a .md address is never touched', await html.evaluate(() => { const h = document.documentElement; return !h.hasAttribute('data-mdv') && !h.hasAttribute('data-mdv-claim') && !h.hasAttribute('class') && !h.hasAttribute('style') && !document.querySelector('.mdv-root'); }));
+    check('web: ... gets none of Hushmark\'s styles', await html.evaluate(() => {
+      document.documentElement.setAttribute('data-mdv', 'probe');
+      const ok = getComputedStyle(document.body).overflow === 'visible' && getComputedStyle(document.documentElement).getPropertyValue('--mdv-bg') === '';
+      document.documentElement.removeAttribute('data-mdv');
+      return ok;
+    }));
+    await setPrefs({ theme: 'nord', size: 21 });
+    await html.waitForTimeout(300);
+    check('web: ... and does not see settings change', await html.evaluate(() => { const h = document.documentElement; return !h.hasAttribute('data-mdv-theme') && !h.hasAttribute('class') && !h.hasAttribute('style'); }));
+    await clearPrefs();
+    await html.close();
+
+    // an XML document holding a <PRE> is not Chrome's plain-text view either
+    const xml = await context.newPage();
+    await xml.goto('https://md.test/docs/feed.md');
+    await xml.waitForTimeout(300);
+    await setPrefs({ theme: 'dracula' });
+    await xml.waitForTimeout(300);
+    const xmlRefused = await sw.evaluate(async () => { const [tab] = await chrome.tabs.query({ url: 'https://md.test/docs/feed.md' }); return self.renderTab(tab.id); });
+    check('web: an XML document at a .md address is never touched, even by the button', xmlRefused === false && await xml.evaluate(() => { const h = document.documentElement; return !h.hasAttribute('data-mdv') && !h.hasAttribute('data-mdv-claim') && !h.hasAttribute('data-mdv-theme'); }));
+    await clearPrefs();
+    await xml.close();
+
+    // turn automatic rendering off in Settings
+    await page.click('.mdv-settings-toggle');
+    await page.locator('.mdv-settings label.mdv-toggle-row', { hasText: 'Format Markdown files on websites' }).locator('input').uncheck();
+    await page.keyboard.press('Escape');
+    check('web: turning the setting off unregisters the website script', await waitFor(async () => !(await webScriptRegistered())));
+    await page.reload();
+    await page.waitForTimeout(400);
+    check('web: with the setting off, Hushmark does not run on websites', await page.evaluate(() => !document.documentElement.hasAttribute('data-mdv') && !document.documentElement.hasAttribute('data-mdv-claim') && document.body.firstElementChild.tagName === 'PRE'));
+
+    // the toolbar button still works on that tab
+    const clicked = await sw.evaluate(async () => { const [tab] = await chrome.tabs.query({ url: 'https://md.test/docs/readme.md' }); return self.renderTab(tab.id); });
+    check('button: the toolbar button renders the tab while automatic rendering is off', clicked === true && (await page.evaluate(() => document.documentElement.getAttribute('data-mdv'))) === 'rendered');
+
+    // ... and on plain text whose address has no Markdown extension
+    const plain = await context.newPage();
+    await plain.goto('https://md.test/notes/plain');
+    await plain.waitForTimeout(200);
+    check('button: a plain-text tab without .md is not formatted on its own', await plain.evaluate(() => !document.documentElement.hasAttribute('data-mdv')));
+    const clicked2 = await sw.evaluate(async () => { const [tab] = await chrome.tabs.query({ url: 'https://md.test/notes/plain' }); return self.renderTab(tab.id); });
+    check('button: ... and is formatted by the toolbar button', clicked2 === true && (await plain.textContent('.mdv-content h1')).includes('No extension'));
+    const again = await sw.evaluate(async () => { const [tab] = await chrome.tabs.query({ url: 'https://md.test/notes/plain' }); return self.renderTab(tab.id); });
+    check('button: clicking twice does not render twice', again === true && (await plain.evaluate(() => document.querySelectorAll('.mdv-root').length)) === 1);
+    await plain.close();
+
+    // the button on a page that is not plain text reports it on the badge
+    const htmlTab = await context.newPage();
+    await htmlTab.goto('https://md.test/page.html');
+    await htmlTab.waitForTimeout(150);
+    const refused = await sw.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: 'https://md.test/page.html' });
+      const ok = await self.renderTab(tab.id);
+      return { ok, badge: await chrome.action.getBadgeText({ tabId: tab.id }) };
+    });
+    check('button: on an HTML page it refuses and shows a badge', refused.ok === false && refused.badge === '!' && (await htmlTab.evaluate(() => !document.querySelector('.mdv-root'))), JSON.stringify(refused));
+    check('button: ... without adding any styles to it', await htmlTab.evaluate(() => {
+      document.documentElement.setAttribute('data-mdv', 'probe');
+      return getComputedStyle(document.body).overflow === 'visible' && getComputedStyle(document.documentElement).getPropertyValue('--mdv-bg') === '';
+    }));
+    await htmlTab.close();
+
+    // back on
+    await setPrefs({ webPages: true });
+    check('web: turning the setting back on registers the script again', await waitFor(webScriptRegistered));
+    await page.close();
+    await clearPrefs();
+  }
+
+  // --------------------------------------------- settings across tabs
+  {
+    const A = await context.newPage();
+    await A.goto(fileUrl('basic.md'));
+    await setPrefs({ theme: 'nord', rememberFiles: true });
+    await A.reload();
+    await A.waitForTimeout(250);
+    const B = await context.newPage();
+    await B.goto(fileUrl('basic.md'));
+    await B.waitForTimeout(250);
+    await B.click('.mdv-settings-toggle');
+    await B.click('.mdv-settings button:has-text("Reset all Hushmark data")');
+    await B.click('.mdv-settings button:has-text("Reset everything")');
+    await B.waitForTimeout(400);
+    check('tabs: a Reset in one tab applies in the others', await A.evaluate(() => document.documentElement.getAttribute('data-mdv-theme')) === 'auto');
+    await A.click('.mdv-toc-toggle');
+    await A.waitForTimeout(100);
+    const after = (await getPrefs()) || {};
+    check('tabs: another tab does not write the old settings back', after.rememberFiles === false && after.theme === 'auto' && after.toc === true, JSON.stringify(after));
+    await clearPrefs();
+    await A.close();
+    await B.close();
+  }
+
+  // ------------------------------- Escape in Settings over a narrow outline
+  {
+    const { page } = await openFixture(context, 'basic.md');
+    await page.setViewportSize({ width: 800, height: 700 });
+    await page.click('.mdv-toc-toggle');
+    await page.waitForTimeout(150);
+    const shown = await page.evaluate(() => !document.querySelector('.mdv-toc').hidden);
+    await page.focus('.mdv-settings-toggle'); // the outline's scrim covers the top bar
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => ({ drawer: document.querySelector('dialog.mdv-settings').open, outline: !document.querySelector('.mdv-toc').hidden }));
+    check('outline: Escape in Settings closes only Settings, not the outline behind it', shown && !after.drawer && after.outline && ((await getPrefs()) || {}).toc === true, JSON.stringify(after));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    check('outline: ... and a second Escape closes the outline', await page.evaluate(() => document.querySelector('.mdv-toc').hidden) && ((await getPrefs()) || {}).toc === false);
+    await clearPrefs();
+    await page.close();
+  }
+
+  // ------------------------------------- encodings and line endings kept
+  {
+    const cases = [
+      { name: 'crlf-bom.md', bytes: Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from('# CRLF file\r\n\r\nLine one\r\n', 'utf8')]), check: (b) => b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF && /\r\nLine two/.test(b.toString('utf8')) && !/[^\r]\n/.test(b.toString('utf8')) },
+      { name: 'utf16.md', bytes: Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from('# UTF-16 file\r\n\r\nHéllo\r\n', 'utf16le')]), check: (b) => b[0] === 0xFF && b[1] === 0xFE && b.subarray(2).toString('utf16le').includes('Héllo\r\nLine two') },
+      { name: 'lf-plain.md', bytes: Buffer.from('# LF file\n\nLine one\n', 'utf8'), check: (b) => b[0] === 0x23 && !b.includes(0x0D) && b.toString('utf8').includes('Line one\nLine two') },
+    ];
+    for (const c of cases) {
+      writeFileSync(join(fixtures, c.name), c.bytes);
+      try {
+        const { page } = await openFixture(context, c.name);
+        const world = await isolatedWorld(page);
+        await world.eval(diskWithBytes(c.name, c.bytes));
+        await world.eval(SAVE_STUB);
+        await page.click('button[data-mode="source"]');
+        await page.focus('.mdv-source');
+        await page.evaluate(() => { const t = document.querySelector('.mdv-source'); t.setSelectionRange(t.value.length, t.value.length); });
+        await page.keyboard.type('Line two\n');
+        await page.keyboard.press('Meta+s');
+        await page.waitForFunction(() => document.documentElement.hasAttribute('data-test-saved'), null, { timeout: 5000 }).catch(() => {});
+        const written = Buffer.from(await world.eval('Array.from(window.__disk.bytes)'));
+        check(`conventions: ${c.name} keeps its encoding, byte-order mark and line endings`, c.check(written), `${await page.textContent('.mdv-save-state')} | ${JSON.stringify(written.toString('latin1')).slice(0, 120)}`);
+        await world.detach();
+        await page.close();
+      } finally {
+        rmSync(join(fixtures, c.name), { force: true });
+      }
+    }
+  }
+
+  // --------------------------------------------------- web images blocked
+  {
+    await context.route('**://remote.invalid/**', (route) => route.abort());
+    // Every form Chrome resolves to a remote address: plain, no slashes, one
+    // slash, protocol-relative, backslashes, a tab inside the scheme, a UNC
+    // path, srcset, a video poster and a table background. 11 in all.
+    writeFileSync(join(fixtures, 'remote.md'), String.raw`# Remote
+
+Badge: ![build](https://remote.invalid/badge.svg)
+
+<img src="https://remote.invalid/logo.png" width="24" alt="logo">
+
+Disguised: ![a](https:remote.invalid/a.png) ![b](https:/remote.invalid/b.png) ![c](//remote.invalid/c.png)
+
+<p><img src="https:\\remote.invalid\d.png" alt="d"> <img src="ht&#9;tps://remote.invalid/e.png" alt="e"> <img src="\\remote.invalid\share\f.png" alt="f"> <img srcset="https:remote.invalid/g.png 1x" alt="g"></p>
+
+<video poster="https:remote.invalid/h.png"></video>
+
+<table background="https:remote.invalid/i.png"><tr><td>cell</td></tr></table>
+
+![local](./assets/logo.png)
+`);
+    try {
+      const page = await context.newPage();
+      const hits = [];
+      page.on('request', (r) => { if (/remote\.invalid/.test(r.url())) hits.push(r.url()); });
+      await page.goto(fileUrl('remote.md'));
+      await page.waitForTimeout(300);
+      check('remote: images from the web are not loaded', hits.length === 0, hits.join(', '));
+      check('remote: a bar says how many were held back, including disguised addresses', await page.evaluate(() => !document.querySelector('.mdv-notice').hidden && /did not load 11 images/.test(document.querySelector('.mdv-notice').textContent)), await page.textContent('.mdv-notice'));
+      check('remote: local images still load', await page.evaluate(() => { const img = [...document.querySelectorAll('.mdv-content img')].find((i) => (i.getAttribute('src') || '').includes('assets/logo.png')); return !!img && img.complete && img.naturalWidth === 48; }));
+      await page.click('button[data-mode="edit"]');
+      await setSelection(page, 'main.mdv-content h1', 'end');
+      await page.keyboard.type(' edited');
+      await page.click('button[data-mode="source"]');
+      const md = await page.inputValue('.mdv-source');
+      check('remote: blocked image addresses survive an edit', md.includes('![build](https://remote.invalid/badge.svg)') && md.includes('src="https://remote.invalid/logo.png"') && md.includes('(https:remote.invalid/a.png)') && !/data-mdv/.test(md), md);
+      check('remote: still nothing loaded after editing', hits.length === 0, hits.join(', '));
+
+      // cut and paste a held-back image: it must stay held back and keep its address
+      await page.click('button[data-mode="edit"]');
+      await page.evaluate(() => {
+        const p = [...document.querySelectorAll('main.mdv-content p')].find((x) => x.querySelector('img[alt="build"]'));
+        const r = document.createRange(); r.selectNodeContents(p);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      });
+      await page.keyboard.press('Meta+x');
+      await setSelection(page, 'main.mdv-content > p:last-of-type', 'end');
+      await page.keyboard.press('Meta+v');
+      await page.waitForTimeout(200);
+      check('remote: a cut-and-pasted image stays held back', await page.evaluate(() => { const img = document.querySelector('main.mdv-content img[alt="build"]'); return !!img && img.hasAttribute('data-mdv-blocked') && !img.hasAttribute('src'); }), await page.evaluate(() => document.querySelector('main.mdv-content img[alt="build"]')?.outerHTML));
+      await page.click('button[data-mode="source"]');
+      check('remote: ... and keeps its address in the saved text', (await page.inputValue('.mdv-source')).includes('![build](https://remote.invalid/badge.svg)'), await page.inputValue('.mdv-source'));
+      check('remote: nothing loaded by cut and paste', hits.length === 0, hits.join(', '));
+      await page.click('button[data-mode="read"]');
+      await page.click('.mdv-load-remote');
+      await page.waitForTimeout(300);
+      check('remote: "Load images" loads them for this tab', hits.length >= 2 && (await page.evaluate(() => document.querySelector('.mdv-notice').hidden)), hits.join(', '));
+      await page.close();
+
+      // turning the automatic setting off stops loading again in the same tab
+      const p2 = await context.newPage();
+      const hits2 = [];
+      p2.on('request', (r) => { if (/remote\.invalid/.test(r.url())) hits2.push(r.url()); });
+      await p2.goto(fileUrl('remote.md'));
+      await p2.waitForTimeout(250);
+      await p2.click('.mdv-settings-toggle');
+      const auto = p2.locator('.mdv-settings label.mdv-toggle-row', { hasText: 'Load web images automatically' }).locator('input');
+      await auto.check();
+      await p2.waitForTimeout(300);
+      const loadedWhileOn = hits2.length;
+      await auto.uncheck();
+      await p2.keyboard.press('Escape');
+      await p2.click('button[data-mode="source"]');
+      await p2.focus('.mdv-source');
+      await p2.evaluate(() => { const t = document.querySelector('.mdv-source'); t.setSelectionRange(t.value.length, t.value.length); });
+      await p2.keyboard.type('\n![typed](https://remote.invalid/typed.png)\n');
+      await p2.waitForTimeout(500);
+      check('remote: the automatic setting loads images while on', loadedWhileOn > 0, String(loadedWhileOn));
+      check('remote: after turning it off, new web images are held back again', !hits2.some((u) => u.includes('typed.png')) && (await p2.evaluate(() => !document.querySelector('.mdv-notice').hidden)), hits2.join(', '));
+      await clearPrefs();
+      await p2.close();
+    } finally {
+      rmSync(join(fixtures, 'remote.md'), { force: true });
+    }
+  }
+
+  // ------------------------------------------------------ reset all data
+  {
+    const { page } = await openFixture(context, 'basic.md');
+    await setPrefs({ theme: 'nord', rememberFiles: true });
+    await page.reload();
+    await page.waitForTimeout(250);
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+    await page.click('.mdv-settings-toggle');
+    await page.click('.mdv-settings button:has-text("Reset all Hushmark data")');
+    const asked = await page.evaluate(() => { const c = document.querySelector('.mdv-set-confirm'); return { shown: !c.hidden, text: c.textContent, cancelFocused: document.activeElement.textContent === 'Cancel' }; });
+    check('reset: asks first, in place, with Cancel focused', asked.shown && /cannot be undone/.test(asked.text) && asked.cancelFocused && dialogs.length === 0, JSON.stringify(asked));
+    await page.click('.mdv-set-confirm-text'); // a click inside the box keeps Escape for the box
+    await page.keyboard.press('Escape');
+    check('reset: Escape cancels the reset but keeps Settings open', await page.evaluate(() => document.querySelector('.mdv-set-confirm').hidden && document.querySelector('dialog.mdv-settings').open && document.activeElement.textContent === 'Reset all Hushmark data') && ((await getPrefs()) || {}).theme === 'nord');
+    await page.click('.mdv-settings button:has-text("Reset all Hushmark data")');
+    await page.click('.mdv-settings button:has-text("Reset everything")');
+    await page.waitForTimeout(300);
+    check('reset: the outcome is shown in Settings', /All Hushmark data in this browser was removed/.test(await page.textContent('.mdv-set-result[role="status"]')), await page.textContent('.mdv-set-result'));
+    check('reset: settings removed and defaults back', (await getPrefs()) === null && (await page.evaluate(() => document.documentElement.getAttribute('data-mdv-theme'))) === 'auto');
+    check('reset: the file-handle database is deleted', await page.evaluate(async () => !(await indexedDB.databases()).some((d) => d.name === 'local-markdown-viewer')));
     await page.close();
   }
 
@@ -675,7 +1261,7 @@ try {
     await page.click('button[data-mode="source"]');
     const persisted = await page.evaluate(() => document.querySelector('.mdv-source').getBoundingClientRect().width);
     check('split: ratio persists across reload', Math.abs(persisted - after) < 10, `${after} vs ${persisted}`);
-    await page.evaluate(() => localStorage.setItem('local-markdown-viewer:prefs', JSON.stringify({})));
+    await clearPrefs();
     await page.screenshot({ path: join(outDir, 'source-split.png') });
     await page.close();
   }

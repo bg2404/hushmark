@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Hushmark privacy policy</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0; --code: #f6f8fa; --link: #0969da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1117; --fg: #f0f6fc; --muted: #9198a1; --border: #3d444d; --code: #151b23; --link: #4493f8; }
+  }
+  html { background: var(--bg); color: var(--fg); }
+  body {
+    max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 4rem;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 0.25rem; }
+  h1 + p { color: var(--muted); margin-top: 0; }
+  h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+  code { font: 0.875em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code); padding: 0.15em 0.35em; border-radius: 4px; }
+  a { color: var(--link); }
+  li + li { margin-top: 0.35rem; }
+</style>
+</head>
+<body>
+<h1>Hushmark privacy policy</h1>
+<p><em>Effective 23 October 2026</em></p>
+<p>Hushmark is a browser extension that displays Markdown files as formatted documents and lets you edit them: files on your computer, and raw Markdown files on websites. This policy describes everything Hushmark reads, keeps and sends.</p>
+<p>The short version: <strong>Hushmark reads the Markdown file you open, inside your browser, only to show and edit it, and keeps your settings in its own storage on this computer. It never sends, sells or shares that text or anything else, and it has no servers.</strong></p>
+<h2>What Hushmark reads</h2>
+<p>Hushmark reads the text of a Markdown file you open in Chrome, in that browser tab, to show it formatted and to let you edit it. In the Chrome Web Store&#39;s terms this is &quot;website content&quot;, and it is the only kind of user data Hushmark handles. The text is processed only in your browser. It is never sent anywhere.</p>
+<p>It does this on:</p>
+<ul>
+<li><strong>Files on your computer</strong>: <code>file://</code> addresses ending in <code>.md</code>, <code>.markdown</code>, <code>.mdown</code>, <code>.mkd</code>, <code>.mkdn</code>, <code>.mdwn</code>, <code>.mdtxt</code> or <code>.mdtext</code>, once you turn on Chrome&#39;s &quot;Allow access to file URLs&quot; setting for Hushmark.</li>
+<li><strong>Files on websites</strong>: web addresses ending the same way, when the site serves them as plain text (as raw files are). This is on by default and can be turned off with <strong>Format Markdown files on websites</strong> in Hushmark&#39;s settings; when it is off, Hushmark&#39;s code does not run on websites at all.</li>
+<li><strong>A tab where you click Hushmark&#39;s toolbar button</strong>, if that tab shows plain text.</li>
+</ul>
+<p>Hushmark needs permission to access all websites for the second case, and Chrome shows that permission when you install. Hushmark does not use it on ordinary web pages. On a page whose address ends in .md but that the site serves as HTML, only a short check runs: it looks at the page type and stops, without changing the page or loading the rest of Hushmark. Hushmark never runs inside frames, and it does not collect or record your browsing history or the addresses of the pages you visit.</p>
+<h2>Images and media from other sites</h2>
+<p>A Markdown file can embed images, video or audio from a web address. Loading one would tell that server that the file was opened, so <strong>Hushmark does not load them</strong>. It shows a bar saying how many it held back, with a <strong>Load images</strong> button. A file on a website may show images from its own site, which already served the file.</p>
+<p>If you click <strong>Load images</strong>, or turn on <strong>Load web images automatically</strong> in Hushmark&#39;s settings, Chrome loads them like on any web page, and those servers receive the requests. Links you click open normally.</p>
+<h2>What Hushmark stores, on your computer only</h2>
+<ul>
+<li><strong>Your settings</strong>: theme, font, text size, page width, whether the outline, autosave, spell checking, automatic web images, website formatting and remembered files are on, and the position of the source/preview divider. They are kept in the extension&#39;s own storage (<code>chrome.storage.local</code>), which web pages and other local files cannot change; only your own clicks in Settings do. Chrome deletes it when you uninstall Hushmark. While Hushmark shows a Markdown file from a website, scripts from that site can see the display settings applied to that page, such as the theme. Earlier versions kept settings in the storage of <code>file://</code> pages; Hushmark moves them over the first time you open a local file after updating, leaving out the options that lower privacy, and deletes them from there.</li>
+<li><strong>Permission to save a file on your computer</strong>: the first time you save a file, you pick it in Chrome&#39;s file dialog, and Chrome gives Hushmark a handle to that file. Hushmark keeps the handle in memory for that tab only. If you turn on <strong>Remember saved files</strong>, Hushmark also keeps the handle in the IndexedDB storage of <code>file://</code> pages, under the file&#39;s full address (for example <code>file:///Users/you/notes/plan.md</code>), one entry for each file you save, so later visits need only Chrome&#39;s permission prompt. This setting is off by default.</li>
+</ul>
+<p>Neither is synced or sent anywhere. Hushmark never writes anything to a website&#39;s own storage.</p>
+<p>Chrome gives every <code>file://</code> page one shared storage area, so other local HTML files you open in Chrome can read the remembered file addresses. While Chrome&#39;s permission to edit a remembered file lasts, such a page could use its handle to write to that file without asking again. That permission lasts until you close every tab showing a local file, or permanently if you chose &quot;Allow on every visit&quot; when Chrome asked. Leave <strong>Remember saved files</strong> off to avoid this.</p>
+<h3>Removing what Hushmark stores</h3>
+<ul>
+<li><strong>Settings → Forget saved files</strong>, in a tab showing a file from your computer, removes every remembered file handle and address.</li>
+<li><strong>Settings → Reset all Hushmark data</strong> removes those and your settings. Used in a tab showing a file from a website, it resets your settings at once and removes remembered files the next time you open a file from your computer.</li>
+<li>Uninstalling Hushmark removes your settings. Remembered file addresses are kept by Chrome with the storage of local files rather than with the extension, so use <strong>Forget saved files</strong> in a tab showing a local file before uninstalling, or delete Chrome&#39;s stored site data.</li>
+</ul>
+<h2>Saving</h2>
+<p>For a file on your computer, Hushmark writes only to the file you linked by picking it in Chrome&#39;s file dialog. Before writing it checks that the file has the same name as the one you opened and still holds the text this tab opened, and it does not write otherwise, or if the file changed on disk in the meantime. A browser page cannot see which folder a file is in, so an identical copy in another folder would pass this check. A file in an older encoding such as Windows-1252 is saved as UTF-8.</p>
+<p>A file on a website cannot be written back, so there <strong>Save</strong> becomes <strong>Download</strong> and saves a copy, unless the site blocks downloads, which Hushmark then tells you. If writing to a local file fails, or your browser cannot write files directly, Hushmark downloads a copy instead. Chrome saves a downloaded copy like any other download, usually in your Downloads folder.</p>
+<h2>What Hushmark does not do</h2>
+<ul>
+<li>It makes no network requests of its own.</li>
+<li>It has no analytics, telemetry, crash reporting, advertising or tracking.</li>
+<li>It has no accounts and no sign-in.</li>
+<li>It does not record which websites or pages you visit.</li>
+<li>It does not download or run code from anywhere; all of its code ships inside the extension.</li>
+<li>It does not sell, transfer or share the text it reads, or any other data, with anyone.</li>
+</ul>
+<h2>Spell checking</h2>
+<p>Spell checking in the editor is off by default. If you turn it on in Hushmark&#39;s settings, Chrome&#39;s own spell checker checks the text according to your Chrome settings. With Chrome&#39;s &quot;Enhanced spell check&quot; enabled, Chrome sends that text to Google.</p>
+<h2>Support link</h2>
+<p>If the publisher has set up a support page, Hushmark&#39;s settings show a <strong>Buy me a coffee</strong> link. It is an ordinary link: it opens that page in a new tab only when you click it, without telling the page which file you were viewing, and Hushmark sends nothing to it. Anything you do on that page is covered by that site&#39;s own policy.</p>
+<h2>Limited Use</h2>
+<p>Hushmark&#39;s use of the information it handles adheres to the <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use">Chrome Web Store User Data Policy</a>, including the Limited Use requirements. The file text is used only to display and edit the file you opened. It is not sold, not transferred, not used for any other purpose, and not used to determine creditworthiness or for lending.</p>
+<h2>Children</h2>
+<p>Hushmark sends no information about anyone, including children, off your device.</p>
+<h2>Changes</h2>
+<p>If what Hushmark reads, stores or sends ever changes, the change will ship in a new version together with an updated policy at this address with a new effective date, updated Chrome Web Store disclosures, and a notice inside Hushmark before the new behaviour starts.</p>
+<h2>Contact</h2>
+<p>Questions about this policy: use the developer contact email shown on Hushmark&#39;s Chrome Web Store listing.</p>
+</body>
+</html>

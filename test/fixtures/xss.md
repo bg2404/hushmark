@@ -77,4 +77,6 @@ runs, `window.__xss` becomes defined and the test fails.
 
 - [ ] <input type="text" value="smuggled">
 
+<div spellcheck="true">spell check forced on</div>
+
 The end.

@@ -16,12 +16,19 @@
   'use strict';
 
   var api = global.Hushmark;
-  if (!api || !api.prefs || !api.createEditor || !api.toMarkdown || !api.fileAccess || !api.icon) {
+  if (!api || !api.prefs || !api.createEditor || !api.toMarkdown || !api.fileAccess || !api.icon || !api.createSettings) {
     return;
   }
   var doc = global.document;
   var prefs = api.prefs;
   var MOD = (api.editorShortcuts && api.editorShortcuts.MOD) || 'Ctrl+';
+  // A Markdown file on a website: it can be read and edited, and "saving"
+  // downloads a copy, because a website's file cannot be written back.
+  var IS_WEB = global.location.protocol !== 'file:';
+  // Some sites sandbox their raw files (raw.githubusercontent.com does): the
+  // page then has an opaque origin, and Chrome silently blocks downloads,
+  // new tabs and dialogs from it.
+  var SANDBOXED = IS_WEB && global.origin === 'null';
   var narrow = global.matchMedia('(max-width: 900px)');
   var numbers = new Intl.NumberFormat();
 
@@ -101,6 +108,7 @@
       loaded: opts.text,      // what this page read from the file:// URL
       richDirty: false,       // Edit-mode DOM would convert to different Markdown
       cleanMarkdown: '',      // what the Edit-mode DOM converted to right after rendering
+      remote: false,          // the user chose "Load images" for this tab
       title: ''
     };
     var frontMatter = api.extractFrontMatter(state.text);
@@ -133,10 +141,17 @@
     });
 
     var actions = el('div', 'mdv-actions');
-    var tocBtn = iconButton('outline', 'Outline', function () { prefs.set({ toc: !prefs.get().toc }); });
+    var tocBtn = iconButton('outline', 'Outline', function (e) {
+      if (e && e.isTrusted === false) {
+        return; // only the user's own click, never a script on the page
+      }
+      prefs.set({ toc: !prefs.get().toc });
+    });
     tocBtn.classList.add('mdv-toc-toggle');
     tocBtn.setAttribute('aria-pressed', 'false');
-    var saveBtn = button(labelled('save', 'Save'), 'mdv-save', function () { save(); }, 'Save (' + MOD + 'S)');
+    var saveBtn = IS_WEB
+      ? button(labelled('save', 'Download'), 'mdv-save', function () { save(); }, 'Download a copy (' + MOD + 'S)')
+      : button(labelled('save', 'Save'), 'mdv-save', function () { save(); }, 'Save (' + MOD + 'S)');
     var settingsBtn = iconButton('settings', 'Settings', function () { toggleSettings(); });
     settingsBtn.classList.add('mdv-settings-toggle');
     settingsBtn.setAttribute('aria-expanded', 'false');
@@ -185,9 +200,15 @@
     stateEl.setAttribute('aria-live', 'polite');
     footer.append(wordsEl, hintEl, stateEl);
 
+    var notice = el('div', 'mdv-notice');
+    notice.setAttribute('role', 'status');
+    notice.hidden = true;
+    var noticeText = el('span', 'mdv-notice-text');
+    notice.append(noticeText, button('Load images', 'mdv-text-btn mdv-load-remote', function () { loadRemote(); }, 'Load the images, video and audio this file embeds from the web'));
+
     var scrim = el('div', 'mdv-scrim');
     scrim.hidden = true;
-    scrim.addEventListener('click', function () { closeOverlays(); });
+    scrim.addEventListener('click', function (e) { if (e.isTrusted) closeOverlays(); });
     var settings = buildSettings();
 
     var editor = api.createEditor({
@@ -196,19 +217,45 @@
       overlay: root,
       onChange: onRichChange,
       isSafeUrl: api.isSafeUrl,
-      sanitize: api.sanitizeHtml,
+      sanitize: function (html) { return api.sanitizeHtml(html, { remote: allowRemote() }); },
       spellcheck: function () { return prefs.get().spellcheck; }
     });
     editor.toolbar.hidden = true;
 
-    root.append(top, editor.toolbar, main, footer, scrim, settings, pre);
+    root.append(top, editor.toolbar, notice, main, footer, scrim, settings, pre);
     pre.hidden = true;
 
     /* ------------------------------------------------------ rendering */
 
+    function allowRemote() {
+      return state.remote || prefs.get().remoteImages;
+    }
+
     function renderInto(target, text, withFrontMatter) {
-      target.innerHTML = api.toHtml(text, { frontMatter: withFrontMatter });
-      return api.addHeadingAnchors(target).title;
+      target.innerHTML = api.toHtml(text, { frontMatter: withFrontMatter, remote: allowRemote() });
+      var title = api.addHeadingAnchors(target).title;
+      refreshNotice();
+      return title;
+    }
+
+    // "N images from the web were not loaded" bar
+    function refreshNotice() {
+      var shown = state.mode === 'source' ? preview : content;
+      var count = allowRemote() ? 0 : api.countRemote(shown);
+      notice.hidden = !count;
+      if (count) {
+        var where = IS_WEB ? 'other sites' : 'the web';
+        noticeText.textContent = count === 1
+          ? 'Hushmark did not load 1 image from ' + where + ', so no server learns this file was opened.'
+          : 'Hushmark did not load ' + count + ' images from ' + where + ', so no server learns this file was opened.';
+      }
+    }
+
+    function loadRemote() {
+      state.remote = true;
+      api.restoreRemote(content);
+      api.restoreRemote(preview);
+      refreshNotice();
     }
 
     function renderRead() {
@@ -324,6 +371,7 @@
         modeButtons[k].setAttribute('aria-pressed', String(k === mode));
       });
       doc.documentElement.setAttribute('data-mdv', mode === 'read' ? 'rendered' : mode);
+      refreshNotice();
       refreshHint();
       refreshAll();
     }
@@ -420,6 +468,23 @@
         return Promise.resolve();
       }
       var text = currentText();
+      if (IS_WEB) {
+        if (!options.auto) {
+          // Still tried: a sandbox that allows downloads lets it through.
+          downloadCopy(text);
+          if (SANDBOXED) {
+            // The page cannot tell whether its sandbox allows downloads.
+            setStatus('If no download started, this site blocks downloads from its pages. Copy the text from Source mode instead.');
+          } else {
+            setStatus('Downloaded a copy of ' + fileName + '. A file on a website cannot be saved in place.', 'ok');
+          }
+        }
+        return Promise.resolve();
+      }
+      if (!options.auto && !isDirty()) {
+        setStatus('No changes to save');
+        return Promise.resolve();
+      }
       if (!api.fileAccess.supported) {
         if (options.auto) {
           return Promise.resolve();
@@ -434,23 +499,29 @@
       return api.fileAccess.save(text, fileName, {
         expectedText: state.loaded,
         beforePicker: function () {
-          setStatus('In the dialog, choose ' + fileName + ' itself to save in place. It opens in your last-used folder, not next to the file.');
+          setStatus('To save in place, choose ' + fileName + ' in the dialog. It opens in your last-used folder, so go to the file\'s folder first.');
         }
       }).then(function (result) {
-        if (result && result.elsewhere) {
-          setStatus('Saved a copy as ' + result.name + '. ' + fileName + ' was not changed, so the document is still unsaved.', 'error');
-          return;
-        }
         state.original = text;
         state.loaded = text;
         autosaveSuspended = false;
-        setStatus('Saved ' + clockTime() + (result && result.picked ? ' through the save dialog' : ''), 'ok');
+        var note = result && result.converted ? ' as UTF-8' : '';
+        setStatus('Saved ' + clockTime() + note, 'ok');
       }, function (err) {
         var name = (err && err.name) || 'error';
         if (name === 'AbortError') {
           setStatus('Save cancelled');
+        } else if (name === 'NeedsGestureError') {
+          setStatus(fileName + ' is linked. Press ' + MOD + 'S again to let Chrome ask for permission to save.');
+        } else if (name === 'MismatchError') {
+          setStatus('Nothing was saved: that is not the file this tab opened. Choose ' + fileName + ' from its own folder.', 'error');
+        } else if (name === 'ConflictError') {
+          autosaveSuspended = true;
+          setStatus('Nothing was saved: ' + fileName + ' changed on disk since this tab opened it. Copy your changes, then reload to get the new version.', 'error');
+        } else if (name === 'SavedAsCopy') {
+          setStatus('Saved through the save dialog as ' + err.savedName + '. This browser cannot check the file first, so the document stays marked unsaved.', 'error');
         } else if (name === 'PermissionDeniedError') {
-          setStatus('Not saved: permission to write ' + fileName + ' was not granted. Use "Forget file access" in Settings to choose the file again.', 'error');
+          setStatus('Not saved: permission to write ' + fileName + ' was not granted. Use "Forget saved files" in Settings to choose the file again.', 'error');
         } else if (options.auto) {
           autosaveSuspended = true;
           setStatus('Autosave failed; press ' + MOD + 'S to save.', 'error', name + (err && err.message ? ': ' + err.message : ''));
@@ -470,7 +541,7 @@
     }
 
     var autosaveSoon = debounce(function () {
-      if (!prefs.get().autosave || !isDirty() || autosaveSuspended) {
+      if (IS_WEB || !prefs.get().autosave || !isDirty() || autosaveSuspended) {
         return;
       }
       if (saving) {
@@ -490,7 +561,7 @@
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         save();
-      } else if (e.key === 'Escape' && narrow.matches && !toc.hidden) {
+      } else if (e.key === 'Escape' && e.isTrusted && !settings.open && narrow.matches && !toc.hidden) {
         prefs.set({ toc: false });
         tocBtn.focus();
       }
@@ -525,7 +596,7 @@
           if (h.id) {
             global.history.replaceState(null, '', '#' + h.id);
           }
-          if (narrow.matches) {
+          if (narrow.matches && e.isTrusted) {
             prefs.set({ toc: false });
           }
         });
@@ -534,7 +605,13 @@
         tocLinks.push({ heading: h, link: a });
       });
       var title = el('h2', 'mdv-toc-title', 'Outline');
-      title.appendChild(iconButton('close', 'Close outline', function () { prefs.set({ toc: false }); tocBtn.focus(); }));
+      title.appendChild(iconButton('close', 'Close outline', function (e) {
+        if (e && e.isTrusted === false) {
+          return;
+        }
+        prefs.set({ toc: false });
+        tocBtn.focus();
+      }));
       toc.replaceChildren(title, list.children.length ? list : el('p', 'mdv-toc-empty', 'No headings yet'));
       markCurrentSection();
       if (wasHidden && narrow.matches) {
@@ -633,8 +710,8 @@
       var ratio = narrow.matches ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
       applySplit(Math.min(0.75, Math.max(0.25, ratio)));
     });
-    function endDrag() {
-      if (!dragging) {
+    function endDrag(e) {
+      if (!dragging || (e && e.isTrusted === false)) {
         return;
       }
       dragging = false;
@@ -644,6 +721,9 @@
     divider.addEventListener('pointerup', endDrag);
     divider.addEventListener('pointercancel', endDrag);
     divider.addEventListener('keydown', function (e) {
+      if (!e.isTrusted) {
+        return;
+      }
       var less = narrow.matches ? 'ArrowUp' : 'ArrowLeft';
       var more = narrow.matches ? 'ArrowDown' : 'ArrowRight';
       var step = e.key === less ? -0.05 : (e.key === more ? 0.05 : 0);
@@ -665,123 +745,37 @@
     /* ------------------------------------------------------- settings */
 
     function buildSettings() {
-      var panel = el('dialog', 'mdv-settings');
-      panel.setAttribute('aria-label', 'Settings');
-      var p = prefs.get();
-      var controls = {};
-
-      var head = el('div', 'mdv-settings-head');
-      head.append(el('h2', null, 'Settings'), iconButton('close', 'Close settings', function () { toggleSettings(false); }));
-
-      var grid = el('div', 'mdv-theme-grid');
-      grid.setAttribute('role', 'group');
-      grid.setAttribute('aria-label', 'Theme');
-      var swatches = {};
-      prefs.THEMES.forEach(function (t) {
-        var b = el('button', 'mdv-theme-swatch');
-        b.type = 'button';
-        b.dataset.theme = t.id;
-        b.setAttribute('aria-pressed', String(p.theme === t.id));
-        var bar = el('span', 'mdv-swatch-bar');
-        t.swatch.forEach(function (c) {
-          var s = el('span');
-          s.style.background = c;
-          bar.appendChild(s);
-        });
-        b.append(bar, el('span', 'mdv-label', t.name));
-        b.addEventListener('click', function () { prefs.set({ theme: t.id }); });
-        swatches[t.id] = b;
-        grid.appendChild(b);
+      var panel = api.createSettings({
+        prefs: prefs,
+        fileAccess: api.fileAccess,
+        supportUrl: api.config && api.config.supportUrl,
+        setStatus: function (text) { setStatus(text); },
+        onClose: function () {
+          settingsBtn.setAttribute('aria-expanded', 'false');
+          settingsBtn.focus();
+        }
       });
 
-      function select(labelText, items, key) {
-        var label = el('label', 'mdv-row');
-        label.appendChild(el('span', null, labelText));
-        var s = el('select');
-        s.setAttribute('aria-label', labelText);
-        items.forEach(function (item) {
-          var o = el('option', null, item.name);
-          o.value = item.id;
-          s.appendChild(o);
-        });
-        s.value = p[key];
-        s.addEventListener('change', function () {
-          var patch = {};
-          patch[key] = s.value;
-          prefs.set(patch);
-        });
-        label.appendChild(s);
-        controls[key] = s;
-        return label;
-      }
-
-      var size = el('div', 'mdv-row');
-      size.setAttribute('role', 'group');
-      size.setAttribute('aria-label', 'Text size');
-      size.appendChild(el('span', null, 'Text size'));
-      var stepper = el('span', 'mdv-stepper');
-      var minus = iconButton('minus', 'Smaller text', function () { prefs.set({ size: Math.max(prefs.SIZE_MIN, prefs.get().size - 1) }); });
-      var sizeOut = el('output', null, p.size + 'px');
-      var plus = iconButton('plus', 'Larger text', function () { prefs.set({ size: Math.min(prefs.SIZE_MAX, prefs.get().size + 1) }); });
-      minus.disabled = p.size <= prefs.SIZE_MIN;
-      plus.disabled = p.size >= prefs.SIZE_MAX;
-      stepper.append(minus, sizeOut, plus);
-      size.appendChild(stepper);
-
-      function check(labelText, key) {
-        var label = el('label', 'mdv-check');
-        var cb = el('input');
-        cb.type = 'checkbox';
-        cb.checked = p[key];
-        cb.addEventListener('change', function () {
-          var patch = {};
-          patch[key] = cb.checked;
-          prefs.set(patch);
-        });
-        label.append(cb, el('span', null, labelText));
-        controls[key] = cb;
-        return label;
-      }
-
-      var forget = button('Forget file access', 'mdv-text-btn', function () {
-        api.fileAccess.forget().then(function () {
-          setStatus('File access forgotten; the next save will ask for the file again');
-        });
-      }, 'Drop the stored permission to write this file');
-
-      panel.append(
-        head,
-        el('h3', null, 'Theme'),
-        grid,
-        el('h3', null, 'Text'),
-        select('Font', prefs.FONTS, 'font'),
-        size,
-        select('Width', prefs.WIDTHS, 'width'),
-        el('h3', null, 'Editing'),
-        check('Autosave 2 s after changes', 'autosave'),
-        check("Spell check while editing (uses Chrome's spell checker)", 'spellcheck'),
-        forget,
-        el('p', 'mdv-settings-note', 'Settings are kept in this browser only and never leave your computer.')
-      );
-
-      panel.addEventListener('close', function () {
-        settingsBtn.setAttribute('aria-expanded', 'false');
-        settingsBtn.focus();
-      });
-      panel.addEventListener('mousedown', function (e) {
-        if (e.target === panel) toggleSettings(false); // the backdrop
-      });
-
+      // What a settings change means for the rest of the page.
+      var last = prefs.get();
       prefs.onChange(function (np) {
-        Object.keys(controls).forEach(function (k) {
-          if (controls[k].type === 'checkbox') controls[k].checked = np[k];
-          else controls[k].value = np[k];
-        });
-        Object.keys(swatches).forEach(function (id) { swatches[id].setAttribute('aria-pressed', String(np.theme === id)); });
-        sizeOut.textContent = np.size + 'px';
-        minus.disabled = np.size <= prefs.SIZE_MIN;
-        plus.disabled = np.size >= prefs.SIZE_MAX;
         editor.setSpellcheck(np.spellcheck);
+        if (np.rememberFiles !== last.rememberFiles) {
+          if (np.rememberFiles) {
+            api.fileAccess.rememberCurrent();
+          } else {
+            api.fileAccess.forgetStored(); // this tab keeps its link until it closes
+          }
+        }
+        if (np.remoteImages !== last.remoteImages) {
+          // only the "Load images" button makes a per-tab exception
+          if (np.remoteImages) {
+            api.restoreRemote(content);
+            api.restoreRemote(preview);
+          }
+          refreshNotice();
+        }
+        last = np;
         refreshToc();
       });
       return panel;
@@ -794,10 +788,8 @@
     function toggleSettings(force) {
       var show = typeof force === 'boolean' ? force : !settings.open;
       if (show && !settings.open) {
-        settings.showModal();
+        settings.openDrawer();
         settingsBtn.setAttribute('aria-expanded', 'true');
-        var first = settings.querySelector('.mdv-theme-swatch[aria-pressed="true"]') || settings.querySelector('button');
-        if (first) first.focus();
       } else if (!show && settings.open) {
         settings.close();
       }
@@ -819,7 +811,7 @@
     doc.body.appendChild(root);
     stage.focus({ preventScroll: true });
     refreshAll();
-    setStatus(api.fileAccess.supported ? '' : 'Saving will download a copy (File System Access API unavailable)');
+    setStatus(IS_WEB || api.fileAccess.supported ? '' : 'Saving will download a copy (File System Access API unavailable)');
 
     return {
       setMode: setMode,

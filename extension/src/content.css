@@ -324,6 +324,20 @@ html[data-mdv] .mdv-content tbody tr:nth-child(2n) {
 
 /* media */
 
+/* a web image Hushmark has not loaded: its alt text in a dashed box */
+html[data-mdv] .mdv-content [data-mdv-blocked] {
+  display: inline-block;
+  min-width: 1.5em;
+  min-height: 1.2em;
+  padding: 0 0.3em;
+  color: var(--mdv-muted);
+  font-size: 0.875em;
+  outline: 1px dashed var(--mdv-border-strong);
+  outline-offset: 1px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
 html[data-mdv] .mdv-content img,
 html[data-mdv] .mdv-content video {
   max-width: 100%;

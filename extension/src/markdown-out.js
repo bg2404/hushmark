@@ -43,6 +43,63 @@
     }
   });
 
+  // Link and image addresses. Markdown un-escapes "\\" (and "\\(" etc.) inside
+  // them, and Turndown only escapes brackets, so an address with backslashes
+  // (a Windows or network path) would lose half of them on every save.
+  // Backslashes are doubled first; addresses with whitespace go in <...>.
+  // These rules are added before the autolink and layout rules below, which
+  // therefore still take precedence.
+  function destination(url) {
+    var d = String(url).replace(/\\/g, '\\\\').replace(/([<>()])/g, '\\$1');
+    return /\s/.test(d) ? '<' + d + '>' : d;
+  }
+
+  function titlePart(node) {
+    var t = node.getAttribute('title');
+    if (!t) {
+      return '';
+    }
+    t = t.replace(/(\n+\s*)+/g, '\n').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return ' "' + t + '"';
+  }
+
+  // Markdown cannot carry some addresses faithfully: marked percent-encodes
+  // backslashes and control characters in them, which turns a Windows or
+  // network path into a different, local one. Those keep their HTML tag.
+  var NEEDS_HTML = /[\\\u0000-\u001f\u007f]/;
+
+  function attr(name, value) {
+    return value ? ' ' + name + '="' + api.escapeHtml(value) + '"' : '';
+  }
+
+  service.addRule('image', {
+    filter: 'img',
+    replacement: function (content, node) {
+      var src = node.getAttribute('src') || '';
+      if (!src) {
+        return '';
+      }
+      if (NEEDS_HTML.test(src)) {
+        return '<img' + attr('src', src) + attr('alt', node.getAttribute('alt')) + attr('title', node.getAttribute('title')) + '>';
+      }
+      var alt = service.escape((node.getAttribute('alt') || '').replace(/(\n+\s*)+/g, '\n'));
+      return '![' + alt + '](' + destination(src) + titlePart(node) + ')';
+    }
+  });
+
+  service.addRule('inlineLink', {
+    filter: function (node) {
+      return node.nodeName === 'A' && !!node.getAttribute('href');
+    },
+    replacement: function (content, node) {
+      var href = node.getAttribute('href');
+      if (NEEDS_HTML.test(href)) {
+        return '<a' + attr('href', href) + attr('title', node.getAttribute('title')) + '>' + content + '</a>';
+      }
+      return '[' + content + '](' + destination(href) + titlePart(node) + ')';
+    }
+  });
+
   // A link whose text is its own URL becomes a bare autolink.
   service.addRule('autolink', {
     filter: function (node) {
@@ -190,9 +247,16 @@
   // Removes editor-only nodes and normalises what contenteditable leaves
   // behind (non-breaking spaces in prose, empty "<p><br></p>" lines).
   function prepare(root) {
-    var doc = root.ownerDocument;
-    var clone = root.cloneNode(true);
+    // Work on a copy inside an inert document: it has no browsing context,
+    // so restoring a blocked image's address below cannot make it load.
+    var doc = root.ownerDocument.implementation.createHTMLDocument('');
+    var clone = doc.importNode(root, true);
+    doc.body.appendChild(clone);
     clone.querySelectorAll('.mdv-anchor, [data-mdv-ui]').forEach(function (el) { el.remove(); });
+    // web images that were blocked from loading keep their real addresses
+    if (api.restoreRemote) {
+      api.restoreRemote(clone);
+    }
     clone.querySelectorAll('[contenteditable]').forEach(function (el) { el.removeAttribute('contenteditable'); });
     // a raw <pre> without <code> is still a code block
     clone.querySelectorAll('pre').forEach(function (pre) {

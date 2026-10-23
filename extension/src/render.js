@@ -43,7 +43,8 @@
       'fieldset', 'legend', 'datalist', 'output', 'template', 'marquee'
     ],
     // Inline styles can load remote resources (url(...)) and overlay the UI.
-    FORBID_ATTR: ['style']
+    // spellcheck: the editor's setting decides, not the document.
+    FORBID_ATTR: ['style', 'spellcheck']
   };
 
   // The "mdv-" class prefix and "data-mdv*" attributes belong to the viewer's
@@ -64,6 +65,27 @@
     }
   });
 
+  // Copying or cutting a held-back image puts its parked address on the
+  // clipboard. Put it back before attributes are checked, so it goes through
+  // the normal URL rules and is parked again below, instead of being dropped
+  // with the other data-mdv attributes. (DOMPurify works in an inert
+  // document, so nothing loads here.)
+  DOMPurify.addHook('beforeSanitizeAttributes', function (node) {
+    if (sanitizingOwnMarkup || !node.getAttribute) {
+      return;
+    }
+    MEDIA_ATTRS.forEach(function (attr) {
+      var parked = node.getAttribute('data-mdv-remote-' + attr);
+      if (parked != null) {
+        if (!node.hasAttribute(attr)) {
+          node.setAttribute(attr, parked);
+        }
+        node.removeAttribute('data-mdv-remote-' + attr);
+      }
+    });
+    node.removeAttribute('data-mdv-blocked');
+  });
+
   // Task-list checkboxes are the only <input> Markdown produces. Force every
   // surviving <input> to be a disabled checkbox so a document cannot show
   // text fields or submit buttons.
@@ -75,7 +97,101 @@
       node.removeAttribute('form');
       node.removeAttribute('value');
     }
+    if (blockRemote) {
+      parkRemote(node);
+    }
   });
+
+  /* ------------------------------------------------------------------ *
+   * Images, video and audio from the web
+   * ------------------------------------------------------------------ */
+
+  // Rendering would make Chrome fetch any image, video or audio a document
+  // embeds from the web, which tells that server the file is being read.
+  // Unless the user chose otherwise, such addresses are parked in
+  // data-mdv-remote-* attributes, so nothing loads, and are put back when
+  // the user asks to load them or when the document is saved.
+  var MEDIA_ATTRS = ['src', 'srcset', 'poster', 'background'];
+  var blockRemote = true;
+
+  // Resolves the address the way Chrome will (it accepts "https:host/x",
+  // backslashes, and tabs or control characters inside the scheme) and lets
+  // only files on this computer, data: and blob: through.
+  function isRemoteUrl(raw) {
+    var s = String(raw).replace(/[\u0000-\u0020]/g, '');
+    if (!s) {
+      return false;
+    }
+    var u;
+    try {
+      u = new URL(s, global.document.baseURI);
+    } catch (err) {
+      return true; // unparseable: do not risk it
+    }
+    if (u.protocol === 'data:' || u.protocol === 'blob:') {
+      return false;
+    }
+    if (u.protocol === 'file:') {
+      return !(u.hostname === '' || u.hostname === 'localhost');
+    }
+    // A Markdown file on a website may show images from its own site: that
+    // server already served the file. Images from any other site are held.
+    var page = global.location;
+    return !((page.protocol === 'http:' || page.protocol === 'https:') && u.origin === page.origin);
+  }
+
+  function isRemote(attr, value) {
+    if (attr === 'srcset') {
+      return value.split(',').some(function (part) {
+        var url = part.trim().split(/\s+/)[0];
+        return !!url && isRemoteUrl(url);
+      });
+    }
+    return isRemoteUrl(value);
+  }
+
+  function parkRemote(node) {
+    if (!node.getAttribute) {
+      return;
+    }
+    MEDIA_ATTRS.forEach(function (attr) {
+      var value = node.getAttribute(attr);
+      if (value != null && isRemote(attr, value)) {
+        node.setAttribute('data-mdv-remote-' + attr, value);
+        node.removeAttribute(attr);
+        node.setAttribute('data-mdv-blocked', '');
+      }
+    });
+  }
+
+  // Puts parked addresses back inside `root`; returns how many elements.
+  function restoreRemote(root) {
+    var nodes = root.querySelectorAll('[data-mdv-blocked]');
+    nodes.forEach(function (node) {
+      MEDIA_ATTRS.forEach(function (attr) {
+        var name = 'data-mdv-remote-' + attr;
+        if (node.hasAttribute(name)) {
+          node.setAttribute(attr, node.getAttribute(name));
+          node.removeAttribute(name);
+        }
+      });
+      node.removeAttribute('data-mdv-blocked');
+    });
+    return nodes.length;
+  }
+
+  function countRemote(root) {
+    return root.querySelectorAll('[data-mdv-blocked]').length;
+  }
+
+  function sanitizeWith(html, options) {
+    blockRemote = !(options && options.remote);
+    try {
+      return DOMPurify.sanitize(html, PURIFY_CONFIG);
+    } finally {
+      blockRemote = true;
+    }
+  }
 
   /* ------------------------------------------------------------------ *
    * Markdown parser
@@ -262,7 +378,7 @@
     var fm = (options && options.frontMatter === false)
       ? { body: markdown, html: '' }
       : extractFrontMatter(markdown);
-    var html = DOMPurify.sanitize(parser.parse(fm.body), PURIFY_CONFIG);
+    var html = sanitizeWith(parser.parse(fm.body), options);
     var fmHtml = '';
     if (fm.html) {
       // built by extractFrontMatter from escaped text; keeps its own class
@@ -278,8 +394,8 @@
 
   // Sanitizes arbitrary HTML (for example pasted content) with the same
   // rules the rendered document gets.
-  function sanitizeHtml(html) {
-    return DOMPurify.sanitize(String(html), PURIFY_CONFIG);
+  function sanitizeHtml(html, options) {
+    return sanitizeWith(String(html), options);
   }
 
   // True when a URL typed by the user would survive the sanitizer, i.e. it is
@@ -344,6 +460,8 @@
     version: '2.0.0',
     toHtml: toHtml,
     sanitizeHtml: sanitizeHtml,
+    restoreRemote: restoreRemote,
+    countRemote: countRemote,
     isSafeUrl: isSafeUrl,
     slugify: slugify,
     extractFrontMatter: extractFrontMatter,
