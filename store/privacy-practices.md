@@ -2,6 +2,8 @@
 
 Answers for the **Privacy practices** tab of the Chrome Web Store developer dashboard. Every answer has to match the privacy policy and what the extension actually does; Google removes items whose answers contradict either. These answers were written against the code in `extension/` and against `store/privacy-policy.md`.
 
+Each answer below fits the dashboard's 1,000-character limit per field.
+
 ## Single purpose description
 
 ```text
@@ -33,9 +35,7 @@ Keeps the toolbar button working on the tab the user clicked when the user has r
 **Host permissions** (`http://*/*`, `https://*/*`, `file:///*`)
 
 ```text
-Markdown files can be on any website (raw files on GitHub, GitLab, documentation sites, and so on), so the content script that formats them must be able to run on any host. Only a short gate script is registered, and only for addresses ending in a Markdown extension (.md, .markdown and similar). It exits immediately, changing nothing, unless the page is a plain-text document; only then is the rest of the extension loaded into that page, so ordinary HTML pages are never changed. It does not run in frames, and it can be turned off in Settings. The extension reads only the text of that Markdown file, to display and edit it in the tab; it sends nothing anywhere, makes no network requests, and does not read or record which pages the user visits.
-
-file:///* is used only if the user turns on "Format Markdown in other local files" (off by default), for local text files that are not named .md but contain Markdown, such as notes.txt. While that setting is on, a small gate script is registered for local files. It reads the first 64 KB and the last 200 characters of a file Chrome shows as plain text, in the tab, skips code, configuration, data and log files, and only if the text looks like Markdown is the rest of the extension loaded into that page. Chrome also requires the user to turn on "Allow access to file URLs". Nothing is sent anywhere.
+Markdown files can be on any website (raw files on GitHub, GitLab, documentation sites), so the script that formats them must be able to run on any host. Only a short gate script is registered, for addresses ending in .md and similar. It exits without changing anything unless the page is a plain-text document; only then is the rest of the extension loaded into that page. It never runs in frames and can be turned off in Settings. file:///* is used only if the user turns on "Format Markdown in other local files" (off by default). A gate then reads the first 64 KB and the last 200 characters of a local file Chrome shows as plain text, skips code, configuration, data and log files, and loads the extension only if the text looks like Markdown. Chrome also requires "Allow access to file URLs". The extension reads only the file's text, in the tab, to display and edit it. It sends nothing anywhere, makes no network requests, and does not record which pages the user visits.
 ```
 
 Local Markdown files are matched by the manifest's own content script (`file:///*.md` and similar endings), which Chrome only runs after the user turns on "Allow access to file URLs". If the dashboard asks about it, use the host-permission text above.
