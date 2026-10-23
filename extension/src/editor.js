@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — editor.js
+ * Hushmark — editor.js
  *
  * WYSIWYG editing on top of the rendered document. The rendered <main> is
  * made contenteditable; formatting goes through the browser's own editing
@@ -14,7 +14,7 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   if (!api) {
     return;
   }

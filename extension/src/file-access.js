@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — file-access.js
+ * Hushmark — file-access.js
  *
  * Writes the edited Markdown back to the file on disk through the browser's
  * File System Access API. Chrome does not let a page write to a file just
@@ -14,12 +14,13 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   if (!api) {
     return;
   }
 
   var supported = typeof global.showSaveFilePicker === 'function';
+  // The database name predates the rename; kept so remembered file access carries over.
   var DB_NAME = 'local-markdown-viewer';
   var STORE = 'file-handles';
   var key = global.location.href.split('#')[0];

@@ -1,10 +1,10 @@
 ---
-title: Local Markdown Viewer fixture
+title: Hushmark fixture
 tags: test, fixture
 author: Someone
 ---
 
-# Local Markdown Viewer fixture
+# Hushmark fixture
 
 Paragraph with **bold**, *italic*, ~~strike~~, `inline code`, a [relative link](./linked.md#target), an [absolute link](https://example.com/never-fetched) and an autolink https://example.org/also-never-fetched.
 

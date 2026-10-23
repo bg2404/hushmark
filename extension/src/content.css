@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — content.css
+ * Hushmark — content.css
  *
  * Styles for the rendered document. Every rule is scoped to html[data-mdv],
  * which app.js sets only after it has rendered a Markdown file; on any other

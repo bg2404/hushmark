@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — icons.js
+ * Hushmark — icons.js
  *
  * A small set of inline SVG icons (24x24, stroked) used by the toolbar and
  * app chrome. Everything is a constant string in this file; no icon fonts,
@@ -8,7 +8,7 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   if (!api) {
     return;
   }

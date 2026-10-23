@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Local Markdown Viewer",
+  "name": "Hushmark",
   "version": "2.0.0",
-  "description": "View and edit Markdown files you open from your computer. Works fully offline: no network access, no analytics, no data collection, no permissions beyond the file you opened.",
+  "description": "Private Markdown viewer and editor for files on your computer. Works offline: no network, no analytics, no permissions.",
   "minimum_chrome_version": "105",
   "icons": {
     "16": "icons/icon16.png",

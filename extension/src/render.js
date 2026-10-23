@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — render.js
+ * Hushmark — render.js
  *
  * Turns Markdown text into sanitized HTML and adds GitHub-style heading
  * anchors. Pure transformation code: it never touches the network, storage,
@@ -340,7 +340,7 @@
     return { title: title };
   }
 
-  global.LocalMarkdownViewer = {
+  global.Hushmark = {
     version: '2.0.0',
     toHtml: toHtml,
     sanitizeHtml: sanitizeHtml,

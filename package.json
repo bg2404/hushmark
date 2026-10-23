@@ -1,5 +1,5 @@
 {
-  "name": "local-markdown-viewer",
+  "name": "hushmark",
   "version": "1.0.0",
   "private": true,
   "description": "Privacy-first Chrome extension that renders local Markdown files. Dev dependencies are used only to vendor libraries and run tests; the extension itself has no build step.",

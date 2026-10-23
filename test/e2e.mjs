@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionPath = realpathSync(resolve(here, '..', 'extension'));
+const EXTENSION_NAME = JSON.parse(readFileSync(join(extensionPath, 'manifest.json'), 'utf8')).name;
 const fixtures = resolve(here, 'fixtures');
 const outDir = resolve(here, 'output');
 const profileDir = resolve(here, '.profile');
@@ -86,7 +87,7 @@ async function isolatedWorld(page) {
   cdp.on('Runtime.executionContextCreated', (e) => contexts.push(e.context));
   await cdp.send('Runtime.enable');
   await new Promise((r) => setTimeout(r, 150));
-  const ctx = contexts.find((c) => c.auxData && c.auxData.isDefault === false && c.name === 'Local Markdown Viewer');
+  const ctx = contexts.find((c) => c.auxData && c.auxData.isDefault === false && c.name === EXTENSION_NAME);
   if (!ctx) throw new Error('content-script world not found among: ' + JSON.stringify(contexts.map((c) => c.name)));
   return {
     async eval(expression) {
@@ -177,13 +178,13 @@ try {
     check('basic: no http(s) requests', remote.length === 0, remote.join(', '));
     check('basic: no console/page errors', errors.length === 0, errors.join(' | '));
     check('basic: original <pre> hidden', await page.evaluate(() => { const p = document.querySelector('.mdv-root > pre'); return p.hidden && getComputedStyle(p).display === 'none'; }));
-    check('basic: document.title', await page.title() === 'Local Markdown Viewer fixture · basic.md', await page.title());
+    check('basic: document.title', await page.title() === 'Hushmark fixture · basic.md', await page.title());
     check('basic: filename in toolbar', await page.textContent('.mdv-filename') === 'basic.md');
     check('basic: Read mode selected', await page.getAttribute('button[data-mode="read"]', 'aria-pressed') === 'true');
-    check('basic: h1 text', (await page.textContent('.mdv-content h1')).includes('Local Markdown Viewer fixture'));
+    check('basic: h1 text', (await page.textContent('.mdv-content h1')).includes('Hushmark fixture'));
     check('basic: front matter table', await page.evaluate(() => {
       const rows = [...document.querySelectorAll('table.mdv-frontmatter tr')].map((r) => r.textContent);
-      return rows.length === 3 && rows[0] === 'titleLocal Markdown Viewer fixture';
+      return rows.length === 3 && rows[0] === 'titleHushmark fixture';
     }));
     check('basic: no literal front matter in body', !(await page.textContent('.mdv-content')).includes('tags: test'));
     check('basic: GFM table', await page.evaluate(() => document.querySelectorAll('.mdv-content table:not(.mdv-frontmatter) td').length === 6));
@@ -202,7 +203,7 @@ try {
     check('basic: <kbd> kept', await page.evaluate(() => document.querySelectorAll('.mdv-content kbd').length === 2));
     const ids = await page.evaluate(() => [...document.querySelectorAll('.mdv-content h1, .mdv-content h2, .mdv-content h3')].map((h) => h.id));
     check('basic: heading ids', JSON.stringify(ids) === JSON.stringify([
-      'local-markdown-viewer-fixture', 'lists', 'table', 'code', 'quote', 'image',
+      'hushmark-fixture', 'lists', 'table', 'code', 'quote', 'image',
       'duplicate', 'duplicate-1', 'hello-world-punctuation--quotes', 'inline-html',
     ]), JSON.stringify(ids));
     check('basic: anchor links point at their heading', await page.evaluate(() =>
@@ -215,7 +216,7 @@ try {
     await page.click('button[data-mode="source"]');
     check('source: textarea visible with original text', await page.evaluate(() => {
       const t = document.querySelector('.mdv-source');
-      return !document.querySelector('.mdv-split').hidden && document.querySelector('.mdv-stage').hidden && t.value.startsWith('---\ntitle: Local Markdown Viewer fixture');
+      return !document.querySelector('.mdv-split').hidden && document.querySelector('.mdv-stage').hidden && t.value.startsWith('---\ntitle: Hushmark fixture');
     }));
     check('source: preview rendered', await page.evaluate(() => !!document.querySelector('.mdv-preview h1')));
     check('source: data-mdv="source"', (await rendered(page)) === 'source');
@@ -320,7 +321,7 @@ try {
     check('edit: formatting bar visible', await page.evaluate(() => !document.querySelector('.mdv-format').hidden && document.querySelectorAll('.mdv-format button').length >= 20));
     check('edit: heading anchors removed while editing', await page.evaluate(() => !document.querySelector('main .mdv-anchor')));
     check('edit: checkboxes enabled', await page.evaluate(() => [...document.querySelectorAll('main input[type=checkbox]')].every((i) => !i.disabled)));
-    check('edit: front matter note shown', await page.evaluate(() => !document.querySelector('.mdv-fm-note').hidden && document.querySelector('.mdv-fm-note pre').textContent.includes('title: Local Markdown Viewer fixture')));
+    check('edit: front matter note shown', await page.evaluate(() => !document.querySelector('.mdv-fm-note').hidden && document.querySelector('.mdv-fm-note pre').textContent.includes('title: Hushmark fixture')));
     check('edit: front matter table not editable content', await page.evaluate(() => !document.querySelector('main table.mdv-frontmatter')));
 
     // type at the end of the first paragraph
@@ -502,7 +503,7 @@ try {
     // source view reflects the rich edits as Markdown
     await page.click('button[data-mode="source"]');
     const md = await page.inputValue('.mdv-source');
-    const expectLines = ['---\ntitle: Local Markdown Viewer fixture', 'autolink https://example.org/also-never-fetched. **Added** *text.*', '## Added heading', '- item one\n- [ ] todo item', '```js\nconst x = 1;\nconst y = 2;\n```', '> quoted', '| Name | Qty |', '[Docs](./docs/guide.md)', '- [x] done task', '- [x] open task', '| Left | Center | Right |', '| :-- | :-: | --: |', '~~strike~~', '<details>\n<summary>Expand me</summary>\n\nHidden *markdown* content.\n\n</details>'];
+    const expectLines = ['---\ntitle: Hushmark fixture', 'autolink https://example.org/also-never-fetched. **Added** *text.*', '## Added heading', '- item one\n- [ ] todo item', '```js\nconst x = 1;\nconst y = 2;\n```', '> quoted', '| Name | Qty |', '[Docs](./docs/guide.md)', '- [x] done task', '- [x] open task', '| Left | Center | Right |', '| :-- | :-: | --: |', '~~strike~~', '<details>\n<summary>Expand me</summary>\n\nHidden *markdown* content.\n\n</details>'];
     for (const line of expectLines) check(`source: contains ${JSON.stringify(line).slice(0, 50)}`, md.includes(line));
     check('source: no non-breaking spaces leaked', !md.includes(' '));
     check('source: no editor artifacts leaked', !/mdv-|data-mdv|contenteditable/.test(md), md.match(/.*mdv.*/)?.[0]);
@@ -561,7 +562,7 @@ try {
     for (const name of ['basic.md', 'linked.md', 'encoding.md', 'bom.md', 'no-frontmatter.md', 'comments.md', 'xss.md']) {
       const text = readFileSync(join(fixtures, name), 'utf8').replace(/^﻿/, '');
       const r = await world.eval(`(() => {
-        const api = window.LocalMarkdownViewer;
+        const api = window.Hushmark;
         const body = api.extractFrontMatter(${JSON.stringify(text)}).body;
         // a bare <div> in Markdown becomes a paragraph after a round trip; that is fine
         const tags = (html) => { const d = document.createElement('div'); d.innerHTML = html; return [...d.querySelectorAll('*')].map((e) => (e.tagName === 'DIV' ? 'P' : e.tagName) + (e.tagName === 'INPUT' ? (e.checked ? '[x]' : '[ ]') : '') + ['href', 'src', 'alt', 'align', 'class', 'start', 'id', 'width'].map((a) => e.getAttribute(a) ? ' ' + a + '=' + e.getAttribute(a) : '').join('')).join(' '); };

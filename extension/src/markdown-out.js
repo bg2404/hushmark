@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — markdown-out.js
+ * Hushmark — markdown-out.js
  *
  * Turns the edited document (DOM) back into Markdown using the vendored
  * Turndown library plus its GFM plugin, tuned to produce the same style of
@@ -10,7 +10,7 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   var TurndownService = global.TurndownService;
   var gfm = global.turndownPluginGfm;
   if (!api || !TurndownService) {

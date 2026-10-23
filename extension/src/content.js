@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — content.js
+ * Hushmark — content.js
  *
  * Runs on file:// URLs that end in a Markdown extension (see manifest.json).
  * Chrome shows such files as plain text inside a single <pre> element; this
@@ -14,7 +14,7 @@
   'use strict';
 
   var MARKDOWN_PATH = /\.(?:md|markdown|mdown|mkdn?|mdwn|mdtxt|mdtext)$/i;
-  var api = window.LocalMarkdownViewer;
+  var api = window.Hushmark;
 
   function isChromePlainTextView() {
     var type = document.contentType || '';
@@ -87,7 +87,7 @@
     try {
       api.mount({ pre: pre, text: source, fileName: fileName() });
     } catch (err) {
-      console.error('[Local Markdown Viewer] Could not render this file; leaving the plain text in place.', err);
+      console.error('[Hushmark] Could not render this file; leaving the plain text in place.', err);
       document.documentElement.removeAttribute('data-mdv');
       pre.hidden = false;
       return;

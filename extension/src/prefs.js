@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — prefs.js
+ * Hushmark — prefs.js
  *
  * Appearance and editing preferences: theme, font, text size, width,
  * outline, autosave. Stored as one JSON value in the page's localStorage,
@@ -10,11 +10,12 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   if (!api) {
     return;
   }
 
+  // The key predates the rename; it is kept so saved settings carry over.
   var KEY = 'local-markdown-viewer:prefs';
 
   // swatch: [background, surface, text, accent] for the theme picker

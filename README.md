@@ -1,4 +1,6 @@
-# Local Markdown Viewer
+# Hushmark
+
+*A private Markdown viewer and editor for Chrome. Zero permissions, and nothing leaves your computer.*
 
 A Chrome extension that shows Markdown files from your own computer as
 formatted documents, the way GitHub renders a README, and lets you edit them

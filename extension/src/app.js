@@ -1,5 +1,5 @@
 /*
- * Local Markdown Viewer — app.js
+ * Hushmark — app.js
  *
  * Builds the app shell: top bar with Read / Edit / Source modes, the
  * formatting toolbar, an outline panel, the content stage (which scrolls on
@@ -15,7 +15,7 @@
 (function (global) {
   'use strict';
 
-  var api = global.LocalMarkdownViewer;
+  var api = global.Hushmark;
   if (!api || !api.prefs || !api.createEditor || !api.toMarkdown || !api.fileAccess || !api.icon) {
     return;
   }
@@ -455,7 +455,7 @@
           autosaveSuspended = true;
           setStatus('Autosave failed; press ' + MOD + 'S to save.', 'error', name + (err && err.message ? ': ' + err.message : ''));
         } else {
-          global.console.error('[Local Markdown Viewer] Save failed', err);
+          global.console.error('[Hushmark] Save failed', err);
           downloadCopy(text);
           setStatus("Couldn't write to the file, so a copy was downloaded instead.", 'error', name + (err && err.message ? ': ' + err.message : ''));
         }
