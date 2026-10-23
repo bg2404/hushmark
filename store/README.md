@@ -57,7 +57,13 @@ V=$(node -p "require('./extension/manifest.json').version") && rm -rf /tmp/hushm
 1. In the dashboard choose **Add new item** and upload the zip.
 2. **Store listing** tab: copy the fields from `listing.md` and upload the images from `assets/`.
 3. **Privacy practices** tab: copy the answers from `privacy-practices.md`, and paste the privacy policy URL from step 3 (https://github.com/bg2404/hushmark/blob/main/store/privacy-policy.md).
-4. **Test instructions** tab (optional, but it helps the reviewer, who would otherwise see nothing happen): paste the text below.
+4. **Test instructions** page (under Access; optional, but it helps the reviewer, who would otherwise see nothing happen): leave Username and Password empty, and paste this into **Additional instructions**, which takes at most 500 characters:
+
+   ```text
+   No account needed. 1) Open https://raw.githubusercontent.com/github/docs/main/README.md: it shows formatted (Read, Edit, Source). 2) Local files: chrome://extensions > Hushmark > Details > turn on Allow access to file URLs, then open a .md file. 3) The toolbar icon formats any plain-text tab. 4) Optional, off by default: right-click icon > Options > Format Markdown in other local files; a .txt with a heading, two "- [ ]" tasks and a link then opens formatted.
+   ```
+
+   The longer version below has every step; send it if the reviewer asks for more detail.
 5. **Distribution** tab: choose visibility (**Public**, or **Unlisted** to share by link first) and regions (all regions is the default).
 6. Click **Submit for review**. The confirmation dialog has a checkbox to publish automatically when the review passes. Leave it checked to go live on approval. Uncheck it for deferred publishing, then publish from the dashboard within 30 days of approval, or the submission reverts to a draft. If you left it checked and change your mind, choose **Defer publish** from the item's menu.
 
